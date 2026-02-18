@@ -1,0 +1,2461 @@
+---
+# =============================================================================
+# CIS Benchmark - Hardening de Filesystems
+# Controles cubiertos:
+#
+#   SECCIÓN 1.1.1 - Deshabilitar filesystems innecesarios
+#     1.1.1.1 - cramfs
+#     1.1.1.2 - freevxfs
+#     1.1.1.3 - jffs2
+#     1.1.1.4 - hfs
+#     1.1.1.5 - hfsplus
+#   Referencia: NIST SP 800-53 Rev. 5: CM-7
+#   CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1005/TA0005/M1050
+#
+#   SECCIÓN 1.1.2 - Opciones de montaje en /tmp
+#     1.1.2.2 - nodev  en /tmp
+#     1.1.2.4 - nosuid en /tmp
+#   Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+#   CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1200,T1548/TA0005
+#
+#   SECCIÓN 1.1.8 - Opciones de montaje en /dev/shm
+#     1.1.8.1 - nodev  en /dev/shm
+#     1.1.8.2 - noexec en /dev/shm
+#     1.1.8.3 - nosuid en /dev/shm
+#   Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+#   CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1200,T1204,T1548/TA0005
+#
+#   SECCIÓN 1.4 - Configuración del Bootloader y modo single-user
+#     1.4.1 - Contraseña en bootloader (GRUB2)
+#     1.4.3 - Autenticación en modo single-user (root con contraseña)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-6, IA-5
+#   CIS Controls v8: 5.2 | v7: 4.4 | MITRE: T1542,T1548/TA0003,TA0005
+#
+#   SECCIÓN 1.5 - Parámetros de kernel (sysctl)
+#     1.5.2 - ASLR habilitado (kernel.randomize_va_space=2)
+#     1.5.3 - ptrace restringido (kernel.yama.ptrace_scope=1)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-6
+#   CIS Controls v8: 10.5 | v7: 8.3 | MITRE: T1068,T1055/TA0002
+#
+#   SECCIÓN 2.2 - Servicios innecesarios (apt purge)
+#     2.2.2  - Avahi Server    (avahi-daemon)
+#     2.2.4  - DHCP Server     (isc-dhcp-server)
+#     2.2.5  - LDAP Server     (slapd)
+#     2.2.6  - NFS Server      (nfs-kernel-server)
+#     2.2.7  - DNS Server      (bind9)
+#     2.2.8  - FTP Server      (vsftpd)
+#     2.2.9  - HTTP Server     (apache2)
+#     2.2.10 - IMAP/POP3       (dovecot-imapd, dovecot-pop3d)
+#     2.2.11 - Samba           (samba)
+#     2.2.12 - HTTP Proxy      (squid)
+#     2.2.13 - SNMP Server     (snmpd)
+#     2.2.14 - NIS Server      (nis)
+#     2.2.15 - dnsmasq         (dnsmasq)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-7, SI-4
+#   CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1203,T1210,T1543/TA0008/M1042
+#
+#   2.2.16 - MTA Postfix en modo local-only (inet_interfaces=loopback-only)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-7
+#   CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1018,T1210/TA0008/M1042
+#
+#   SECCIÓN 3.1 - Interfaces de red innecesarias
+#     3.1.2 - Deshabilitar interfaces wireless (módulos kernel + denylist)
+#     3.1.3 - Deshabilitar Bluetooth (systemctl mask)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-7
+#   CIS Controls v8: 4.8 | v7: 15.4, 15.5 | MITRE: T1011,T1595/TA0010/M1028
+#
+#   SECCIÓN 3.2 - Parámetros de red del host (sysctl)
+#     3.2.1 - Deshabilitar envío ICMP redirects (send_redirects=0)
+#     3.2.2 - Deshabilitar IP forwarding (ip_forward=0, ipv6 forwarding=0)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-1, CM-2, CM-6, CM-7, IA-5
+#   CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1557/TA0006,TA0009/M1030,M1042
+#
+#   SECCIÓN 3.3 - Parámetros de red host y router (sysctl)
+#     3.3.1 - No aceptar source routed packets (IPv4 + IPv6)
+#     3.3.2 - No aceptar ICMP redirects (IPv4 + IPv6)
+#     3.3.4 - Registrar paquetes sospechosos (log_martians=1)
+#     3.3.5 - Ignorar ICMP broadcast (icmp_echo_ignore_broadcasts=1)
+#     3.3.6 - Ignorar respuestas ICMP bogus (icmp_ignore_bogus_error_responses=1)
+#     3.3.7 - Habilitar Reverse Path Filtering (rp_filter=1)
+#     3.3.8 - Habilitar TCP SYN Cookies (tcp_syncookies=1)
+#   Referencia: NIST SP 800-53 Rev. 5: CM-1, CM-2, CM-6, CM-7, AU-3, IA-5
+#   CIS Controls v8: 4.8, 8.5 | v7: 9.2, 6.2 | MITRE: T1590,T1557,T1498,T1562,T1499/TA0005-TA0040
+#
+#   SECCIÓN 4.1 - Control de acceso a schedulers
+#     4.1.8 - cron restringido a usuarios autorizados (/etc/cron.allow)
+#     4.1.9 - at restringido a usuarios autorizados (/etc/at.allow)
+#   Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+#   CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1053.003/TA0002/M1018
+#
+#   SECCIÓN 4.3 - Hardening de sudo y su
+#     4.3.2 - sudo debe usar pseudo-terminal (Defaults use_pty)
+#     4.3.7 - Restringir comando su a grupo vacío (pam_wheel)
+#   Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+#   CIS Controls v8: 5.4, 3.3 | v7: 5.1, 14.6 | MITRE: T1078,T1548/TA0001,TA0003,TA0005
+#
+#   SECCIÓN 4.5 - Seguridad de cuentas y umask
+#     4.5.2 - Cuentas de sistema sin shell de login y bloqueadas
+#     4.5.4 - umask por defecto 027 o más restrictivo
+#   Referencia: NIST SP 800-53 Rev. 5: AC-2, AC-3, AC-5, MP-2
+#   CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1078,T1565/TA0005
+#
+#   SECCIÓN 5.1.1 - Logging con journald
+#     5.1.1.4 - journald con Storage=persistent (logs sobreviven reinicios)
+#   Referencia: NIST SP 800-53 Rev. 5: AU-3, AU-12
+#   CIS Controls v8: 8.2 | v7: 6.2, 6.3 | MITRE: T1070.002,T1562.006/TA0005/M1022
+#
+#   SECCIÓN 6.1 - Permisos en archivos críticos del sistema
+#     6.1.1 - /etc/passwd        (644 root:root)
+#     6.1.2 - /etc/passwd-       (644 root:root)
+#     6.1.3 - /etc/group         (644 root:root)
+#     6.1.4 - /etc/group-        (644 root:root)
+#     6.1.5 - /etc/shadow        (640 root:shadow)
+#     6.1.6 - /etc/shadow-       (640 root:shadow)
+#     6.1.7 - /etc/gshadow       (640 root:shadow)
+#   Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+#   CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1003.008,T1222.002/TA0005/M1022
+# =============================================================================
+- name: CIS 1.1.1 - Deshabilitar filesystems innecesarios
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Lista de módulos a deshabilitar según CIS 1.1.1.x
+    cis_disabled_filesystems:
+      - name: cramfs
+        description: "Compressed read-only filesystem (CIS 1.1.1.1)"
+      - name: freevxfs
+        description: "Veritas filesystem / HP-UX primary filesystem (CIS 1.1.1.2)"
+      - name: jffs2
+        description: "Journaling flash filesystem (CIS 1.1.1.3)"
+      - name: hfs
+        description: "Mac OS hierarchical filesystem (CIS 1.1.1.4)"
+      - name: hfsplus
+        description: "Mac OS HFS+ filesystem (CIS 1.1.1.5)"
+
+    modprobe_dir: /etc/modprobe.d
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Verificar que modprobe está disponible
+    # --------------------------------------------------------------------------
+    - name: Verificar que el paquete kmod está instalado
+      ansible.builtin.package:
+        name: kmod
+        state: present
+      when: ansible_os_family in ['Debian', 'RedHat', 'Suse']
+
+    # --------------------------------------------------------------------------
+    # Para cada módulo: crear archivo .conf con install + blacklist
+    # --------------------------------------------------------------------------
+    - name: Crear archivo modprobe.d para cada filesystem (install /bin/false + blacklist)
+      ansible.builtin.blockinfile:
+        path: "{{ modprobe_dir }}/{{ item.name | replace('-', '_') }}.conf"
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+        marker: "# {mark} ANSIBLE MANAGED - CIS 1.1.1 - {{ item.name }}"
+        block: |
+          # {{ item.description }}
+          install {{ item.name }} /bin/false
+          blacklist {{ item.name }}
+      loop: "{{ cis_disabled_filesystems }}"
+      loop_control:
+        label: "{{ item.name }}"
+      notify: Actualizar módulos initramfs
+
+    # --------------------------------------------------------------------------
+    # Descargar el módulo si está actualmente cargado en el kernel
+    # --------------------------------------------------------------------------
+    - name: Descargar módulos si están cargados en el kernel
+      community.general.modprobe:
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ cis_disabled_filesystems }}"
+      loop_control:
+        label: "{{ item.name }}"
+      # Ignorar error si el módulo no existe o no está cargado
+      failed_when: false
+      changed_when: false
+
+    # --------------------------------------------------------------------------
+    # Verificación post-remediación
+    # --------------------------------------------------------------------------
+    - name: Verificar que los módulos NO están cargados
+      ansible.builtin.shell: |
+        lsmod | grep -w "{{ item.name }}"
+      loop: "{{ cis_disabled_filesystems }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: lsmod_check
+      changed_when: false
+      failed_when: lsmod_check.rc == 0  # rc=0 significa que el módulo SÍ está cargado (fallo)
+      ignore_errors: true
+
+    - name: Verificar que install está configurado como /bin/false
+      ansible.builtin.shell: |
+        modprobe -n -v "{{ item.name }}" 2>/dev/null | grep -P '^\s*install\s+/bin/(true|false)'
+      loop: "{{ cis_disabled_filesystems }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: modprobe_install_check
+      changed_when: false
+      failed_when: false
+
+    - name: Verificar que los módulos están en la denylist
+      ansible.builtin.shell: |
+        modprobe --showconfig | grep -P '^\s*blacklist\s+{{ item.name | replace("-", "_") }}\b'
+      loop: "{{ cis_disabled_filesystems }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: blacklist_check
+      changed_when: false
+      failed_when: false
+
+    # --------------------------------------------------------------------------
+    # Informe de resultados
+    # --------------------------------------------------------------------------
+    - name: Mostrar resumen de auditoría CIS 1.1.1
+      ansible.builtin.debug:
+        msg: >-
+          [{{ item.item.name }}] -
+          Cargado en kernel: {{ 'NO ✓' if item.rc != 0 else 'SÍ ✗' }} |
+          install /bin/false: {{ 'Configurado ✓' if item.rc == 0 else 'No configurado ✗' }}
+      loop: "{{ lsmod_check.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+  # --------------------------------------------------------------------------
+  # Handlers - Sección 1.1.1
+  # --------------------------------------------------------------------------
+  handlers:
+    - name: Actualizar módulos initramfs
+      ansible.builtin.command: update-initramfs -u
+      when: ansible_os_family == 'Debian'
+      failed_when: false
+
+    - name: Actualizar módulos dracut (RedHat)
+      ansible.builtin.command: dracut --force
+      when: ansible_os_family == 'RedHat'
+      failed_when: false
+
+# =============================================================================
+# PLAY 2: CIS 1.1.2 - Opciones de montaje en /tmp
+# Controles: 1.1.2.2 (nodev) | 1.1.2.4 (nosuid)
+# Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+# =============================================================================
+- name: CIS 1.1.2 - Opciones de montaje seguras en /tmp
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    tmp_mount_options_required:
+      - option: nodev
+        cis_control: "1.1.2.2"
+        description: "Impide crear dispositivos especiales en /tmp"
+        mitre: "T1200/TA0005/M1022"
+      - option: nosuid
+        cis_control: "1.1.2.4"
+        description: "Impide archivos setuid en /tmp"
+        mitre: "T1548.001/TA0005/M1022"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Verificar si /tmp está montado como partición independiente
+    # --------------------------------------------------------------------------
+    - name: Verificar si /tmp está montado como partición separada
+      ansible.builtin.shell: findmnt -kn /tmp
+      register: tmp_mount_check
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar advertencia si /tmp no es partición independiente
+      ansible.builtin.debug:
+        msg: >-
+          ADVERTENCIA: /tmp no está montado como partición independiente.
+          Se recomienda crear una partición dedicada para /tmp (CIS 1.1.2.1).
+          Las opciones de montaje se configurarán igualmente en /etc/fstab.
+      when: tmp_mount_check.rc != 0
+
+    # --------------------------------------------------------------------------
+    # Auditoría previa: verificar opciones faltantes en /tmp
+    # --------------------------------------------------------------------------
+    - name: Auditar opciones de montaje actuales en /tmp
+      ansible.builtin.shell: |
+        findmnt -kn /tmp | grep -v '{{ item.option }}'
+      loop: "{{ tmp_mount_options_required }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.option }}"
+      register: tmp_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría de /tmp
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] /tmp - opción '{{ item.item.option }}':
+          {{ 'CONFIGURADA ✓' if item.rc != 0 else 'FALTANTE ✗ - Se aplicará remediación' }}
+      loop: "{{ tmp_audit.results }}"
+      loop_control:
+        label: "{{ item.item.option }}"
+
+    # --------------------------------------------------------------------------
+    # Remediación: asegurar entrada /tmp en /etc/fstab con opciones correctas
+    # --------------------------------------------------------------------------
+    - name: Verificar si /tmp tiene entrada en /etc/fstab
+      ansible.builtin.shell: grep -E '^\s*\S+\s+/tmp\s+' /etc/fstab
+      register: tmp_fstab_entry
+      changed_when: false
+      failed_when: false
+
+    - name: Agregar entrada de /tmp en /etc/fstab si no existe
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "tmpfs /tmp tmpfs defaults,rw,nosuid,nodev,noexec,relatime 0 0"
+        state: present
+        backup: true
+      when: tmp_fstab_entry.rc != 0
+      notify: Remontar /tmp
+
+    - name: Asegurar opción nodev en la entrada /tmp de /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\s*\S+\s+/tmp\s+\S+\s+)(\S+)(\s+.*)$'
+        replace: '\1\2,nodev\3'
+        backup: true
+      when:
+        - tmp_fstab_entry.rc == 0
+        - "'nodev' not in tmp_fstab_entry.stdout"
+      notify: Remontar /tmp
+
+    - name: Asegurar opción nosuid en la entrada /tmp de /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\s*\S+\s+/tmp\s+\S+\s+)(\S+)(\s+.*)$'
+        replace: '\1\2,nosuid\3'
+        backup: true
+      when:
+        - tmp_fstab_entry.rc == 0
+        - "'nosuid' not in tmp_fstab_entry.stdout"
+      notify: Remontar /tmp
+
+    # --------------------------------------------------------------------------
+    # Remount inmediato sin necesidad de reinicio
+    # --------------------------------------------------------------------------
+    - name: Remontar /tmp con las opciones correctas (remount inmediato)
+      ansible.builtin.command: mount -o remount /tmp
+      changed_when: false
+      failed_when: false
+      when: tmp_mount_check.rc == 0
+
+    # --------------------------------------------------------------------------
+    # Verificación final /tmp
+    # --------------------------------------------------------------------------
+    - name: Verificación final - opciones aplicadas en /tmp
+      ansible.builtin.shell: |
+        findmnt -kn /tmp | grep -v '{{ item.option }}'
+      loop: "{{ tmp_mount_options_required }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.option }}"
+      register: tmp_final_check
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final de auditoría /tmp
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] /tmp - '{{ item.item.option }}':
+          {{ 'PASS ✓' if item.rc != 0 else 'FAIL ✗ - Revisar manualmente' }}
+      loop: "{{ tmp_final_check.results }}"
+      loop_control:
+        label: "{{ item.item.option }}"
+
+  handlers:
+    - name: Remontar /tmp
+      ansible.builtin.command: mount -o remount /tmp
+      failed_when: false
+
+# =============================================================================
+# PLAY 3: CIS 1.1.8 - Opciones de montaje en /dev/shm
+# Controles: 1.1.8.1 (nodev) | 1.1.8.2 (noexec) | 1.1.8.3 (nosuid)
+# Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+# =============================================================================
+- name: CIS 1.1.8 - Opciones de montaje seguras en /dev/shm
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    shm_mount_options_required:
+      - option: nodev
+        cis_control: "1.1.8.1"
+        description: "Impide dispositivos especiales en /dev/shm"
+        mitre: "T1200/TA0005/M1038"
+      - option: noexec
+        cis_control: "1.1.8.2"
+        description: "Impide ejecución de binarios desde /dev/shm"
+        mitre: "T1204.002/TA0005/M1022"
+      - option: nosuid
+        cis_control: "1.1.8.3"
+        description: "Impide archivos setuid en /dev/shm"
+        mitre: "T1548.001/TA0005/M1038"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Auditoría previa: verificar opciones faltantes en /dev/shm
+    # --------------------------------------------------------------------------
+    - name: Auditar opciones de montaje actuales en /dev/shm
+      ansible.builtin.shell: |
+        findmnt -kn /dev/shm | grep -v '{{ item.option }}'
+      loop: "{{ shm_mount_options_required }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.option }}"
+      register: shm_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría de /dev/shm
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] /dev/shm - opción '{{ item.item.option }}':
+          {{ 'CONFIGURADA ✓' if item.rc != 0 else 'FALTANTE ✗ - Se aplicará remediación' }}
+      loop: "{{ shm_audit.results }}"
+      loop_control:
+        label: "{{ item.item.option }}"
+
+    # --------------------------------------------------------------------------
+    # Remediación: asegurar entrada /dev/shm en /etc/fstab con opciones correctas
+    # --------------------------------------------------------------------------
+    - name: Verificar si /dev/shm tiene entrada en /etc/fstab
+      ansible.builtin.shell: grep -E '^\s*\S+\s+/dev/shm\s+' /etc/fstab
+      register: shm_fstab_entry
+      changed_when: false
+      failed_when: false
+
+    - name: Agregar entrada de /dev/shm en /etc/fstab si no existe
+      ansible.builtin.lineinfile:
+        path: /etc/fstab
+        line: "tmpfs /dev/shm tmpfs defaults,rw,nosuid,nodev,noexec,relatime 0 0"
+        state: present
+        backup: true
+      when: shm_fstab_entry.rc != 0
+      notify: Remontar /dev/shm
+
+    - name: Asegurar opción nodev en /dev/shm dentro de /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\s*\S+\s+/dev/shm\s+\S+\s+)(\S+)(\s+.*)$'
+        replace: '\1\2,nodev\3'
+        backup: true
+      when:
+        - shm_fstab_entry.rc == 0
+        - "'nodev' not in shm_fstab_entry.stdout"
+      notify: Remontar /dev/shm
+
+    - name: Asegurar opción noexec en /dev/shm dentro de /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\s*\S+\s+/dev/shm\s+\S+\s+)(\S+)(\s+.*)$'
+        replace: '\1\2,noexec\3'
+        backup: true
+      when:
+        - shm_fstab_entry.rc == 0
+        - "'noexec' not in shm_fstab_entry.stdout"
+      notify: Remontar /dev/shm
+
+    - name: Asegurar opción nosuid en /dev/shm dentro de /etc/fstab
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\s*\S+\s+/dev/shm\s+\S+\s+)(\S+)(\s+.*)$'
+        replace: '\1\2,nosuid\3'
+        backup: true
+      when:
+        - shm_fstab_entry.rc == 0
+        - "'nosuid' not in shm_fstab_entry.stdout"
+      notify: Remontar /dev/shm
+
+    # --------------------------------------------------------------------------
+    # Remount inmediato sin necesidad de reinicio
+    # --------------------------------------------------------------------------
+    - name: Remontar /dev/shm con las opciones correctas (remount inmediato)
+      ansible.builtin.command: mount -o remount /dev/shm
+      changed_when: false
+      failed_when: false
+
+    # --------------------------------------------------------------------------
+    # Verificación final /dev/shm
+    # --------------------------------------------------------------------------
+    - name: Verificación final - opciones aplicadas en /dev/shm
+      ansible.builtin.shell: |
+        findmnt -kn /dev/shm | grep -v '{{ item.option }}'
+      loop: "{{ shm_mount_options_required }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.option }}"
+      register: shm_final_check
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final de auditoría /dev/shm
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] /dev/shm - '{{ item.item.option }}':
+          {{ 'PASS ✓' if item.rc != 0 else 'FAIL ✗ - Revisar manualmente' }}
+      loop: "{{ shm_final_check.results }}"
+      loop_control:
+        label: "{{ item.item.option }}"
+
+  handlers:
+    - name: Remontar /dev/shm
+      ansible.builtin.command: mount -o remount /dev/shm
+      failed_when: false
+
+# =============================================================================
+# PLAY 4: CIS 1.4.1 - Contraseña en bootloader GRUB2
+# Referencia: NIST SP 800-53 Rev. 5: CM-6
+# CIS Controls v8: 5.2 | v7: 4.4 | MITRE: T1542/TA0003/M1046
+# =============================================================================
+- name: CIS 1.4.1 - Verificar contraseña en bootloader GRUB2
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    grub_cfg_path: /boot/grub/grub.cfg
+    grub_custom_cfg: /etc/grub.d/40_custom_cis
+    # IMPORTANTE: Definir estas variables antes de ejecutar el playbook
+    # Generar el hash con: grub-mkpasswd-pbkdf2
+    grub_superuser: "{{ grub_superuser_name | default('grubadmin') }}"
+    grub_password_hash: "{{ grub_password_pbkdf2 | default('') }}"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Auditoría: verificar si ya existe superuser y password en grub.cfg
+    # --------------------------------------------------------------------------
+    - name: Verificar si 'set superusers' está configurado en grub.cfg
+      ansible.builtin.shell: grep -c '^set superusers' {{ grub_cfg_path }}
+      register: grub_superuser_check
+      changed_when: false
+      failed_when: false
+
+    - name: Verificar si 'password_pbkdf2' está configurado en grub.cfg
+      ansible.builtin.shell: grep -c '^password_pbkdf2' {{ grub_cfg_path }}
+      register: grub_password_check
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar estado actual de la auditoría GRUB
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 1.4.1] set superusers en grub.cfg: {{ 'CONFIGURADO ✓' if grub_superuser_check.rc == 0 else 'FALTANTE ✗' }}"
+          - "[CIS 1.4.1] password_pbkdf2 en grub.cfg:  {{ 'CONFIGURADO ✓' if grub_password_check.rc == 0 else 'FALTANTE ✗' }}"
+
+    # --------------------------------------------------------------------------
+    # Advertencia si no se proporcionó hash de contraseña
+    # --------------------------------------------------------------------------
+    - name: Advertencia - hash de contraseña GRUB no definido
+      ansible.builtin.debug:
+        msg: >-
+          ATENCIÓN: La variable 'grub_password_pbkdf2' no está definida.
+          Para aplicar la remediación CIS 1.4.1 ejecute primero en el host:
+            grub-mkpasswd-pbkdf2
+          Luego pase el hash generado con: -e grub_password_pbkdf2='grub.pbkdf2.sha512...'
+          y el usuario con: -e grub_superuser_name='nombreusuario'
+      when: grub_password_hash == ''
+
+    # --------------------------------------------------------------------------
+    # Remediación: crear archivo custom en /etc/grub.d/ con superuser y password
+    # --------------------------------------------------------------------------
+    - name: Crear archivo de configuración GRUB personalizado con superuser y password
+      ansible.builtin.copy:
+        dest: "{{ grub_custom_cfg }}"
+        owner: root
+        group: root
+        mode: '0700'
+        content: |
+          #!/bin/sh
+          # CIS 1.4.1 - Bootloader password - Gestionado por Ansible
+          # ADVERTENCIA: No editar manualmente. Ver /etc/grub.d/README
+          cat <<EOF
+          set superusers="{{ grub_superuser }}"
+          password_pbkdf2 {{ grub_superuser }} {{ grub_password_hash }}
+          EOF
+      when: grub_password_hash != ''
+      notify: Actualizar GRUB
+
+    # --------------------------------------------------------------------------
+    # Verificación final
+    # --------------------------------------------------------------------------
+    - name: Verificación final - superusers en grub.cfg
+      ansible.builtin.shell: grep '^set superusers' {{ grub_cfg_path }}
+      register: grub_final_superuser
+      changed_when: false
+      failed_when: false
+
+    - name: Verificación final - password_pbkdf2 en grub.cfg
+      ansible.builtin.shell: grep '^password_pbkdf2' {{ grub_cfg_path }}
+      register: grub_final_password
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final de auditoría CIS 1.4.1
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 1.4.1] set superusers:    {{ 'PASS ✓' if grub_final_superuser.rc == 0 else 'FAIL ✗ - Revisar manualmente' }}"
+          - "[CIS 1.4.1] password_pbkdf2:   {{ 'PASS ✓' if grub_final_password.rc == 0 else 'FAIL ✗ - Revisar manualmente' }}"
+
+  handlers:
+    - name: Actualizar GRUB
+      ansible.builtin.command: update-grub
+      failed_when: false
+
+# =============================================================================
+# PLAY 5: CIS 1.4.3 - Autenticación requerida en modo single-user
+# Referencia: NIST SP 800-53 Rev. 5: IA-5
+# CIS Controls v8: 5.2 | v7: 4.4 | MITRE: T1548/TA0005/M1022
+# =============================================================================
+- name: CIS 1.4.3 - Verificar autenticación en modo single-user (root con contraseña)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Auditoría: verificar si root tiene contraseña configurada
+    # --------------------------------------------------------------------------
+    - name: Verificar si la cuenta root tiene contraseña establecida
+      ansible.builtin.shell: |
+        grep -Eq '^root:\$[0-9]' /etc/shadow && echo "password_set" || echo "root_locked"
+      register: root_password_check
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar estado de auditoría CIS 1.4.3
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 1.4.3] Cuenta root:
+          {{ 'Tiene contraseña configurada ✓ - PASS' if root_password_check.stdout == 'password_set'
+             else 'Sin contraseña / cuenta bloqueada ✗ - FAIL - Se requiere acción manual' }}
+
+    # --------------------------------------------------------------------------
+    # Advertencia si root no tiene contraseña
+    # --------------------------------------------------------------------------
+    - name: Advertencia - root sin contraseña (acción manual requerida)
+      ansible.builtin.debug:
+        msg:
+          - "ADVERTENCIA [CIS 1.4.3]: La cuenta root no tiene contraseña configurada."
+          - "Esto permite acceder al sistema en modo single-user sin autenticación."
+          - "Para remediar, ejecute en el host: passwd root"
+          - "Por seguridad, Ansible NO establece contraseñas de root en texto plano."
+          - "Use ansible-vault o un proceso fuera de banda para configurar la contraseña."
+      when: root_password_check.stdout != 'password_set'
+
+    # --------------------------------------------------------------------------
+    # Remediación asistida: establecer contraseña si se proporcionó via vault
+    # La variable 'root_password_hash' debe venir de ansible-vault
+    # Generar hash con: openssl passwd -6 'contraseña'
+    # --------------------------------------------------------------------------
+    - name: Establecer contraseña de root (requiere root_password_hash via ansible-vault)
+      ansible.builtin.user:
+        name: root
+        password: "{{ root_password_hash }}"
+        update_password: always
+      when:
+        - root_password_check.stdout != 'password_set'
+        - root_password_hash is defined
+        - root_password_hash != ''
+      no_log: true  # No registrar la contraseña en los logs
+
+    # --------------------------------------------------------------------------
+    # Verificación final
+    # --------------------------------------------------------------------------
+    - name: Verificación final - contraseña de root post-remediación
+      ansible.builtin.shell: |
+        grep -Eq '^root:\$[0-9]' /etc/shadow && echo "password_set" || echo "root_locked"
+      register: root_final_check
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final de auditoría CIS 1.4.3
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 1.4.3] Autenticación single-user:
+          {{ 'PASS ✓ - root tiene contraseña configurada' if root_final_check.stdout == 'password_set'
+             else 'FAIL ✗ - root sin contraseña. Ejecutar: passwd root' }}
+
+# =============================================================================
+# PLAY 6: CIS 1.5 - Parámetros de kernel (sysctl)
+# Controles:
+#   1.5.2 - ASLR: kernel.randomize_va_space = 2
+#   1.5.3 - ptrace restringido: kernel.yama.ptrace_scope = 1
+# Referencia: NIST SP 800-53 Rev. 5: CM-6
+# CIS Controls v8: 10.5 | v7: 8.3 | MITRE: T1068,T1055/TA0002/M1050
+# =============================================================================
+- name: CIS 1.5 - Parámetros de seguridad del kernel (sysctl)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    sysctl_config_file: /etc/sysctl.d/60-cis_kernel_hardening.conf
+    cis_kernel_parameters:
+      - name: kernel.randomize_va_space
+        value: "2"
+        cis_control: "1.5.2"
+        description: "ASLR - Address Space Layout Randomization"
+        mitre: "T1068/TA0002/M1050"
+      - name: kernel.yama.ptrace_scope
+        value: "1"
+        cis_control: "1.5.3"
+        description: "Restringir uso de ptrace entre procesos del mismo usuario"
+        mitre: "T1055/TA0002/M1050"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Auditoría: verificar parámetros en la configuración activa del kernel
+    # --------------------------------------------------------------------------
+    - name: Auditar parámetros sysctl activos
+      ansible.builtin.shell: |
+        current=$(sysctl -n {{ item.name }} 2>/dev/null)
+        if [ "$current" = "{{ item.value }}" ]; then
+          echo "PASS"
+        else
+          echo "FAIL:$current"
+        fi
+      loop: "{{ cis_kernel_parameters }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: sysctl_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría sysctl
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {{ 'CONFIGURADO correctamente ✓ (valor=' + item.item.value + ')' if item.stdout == 'PASS'
+             else 'INCORRECTO ✗ (valor actual=' + item.stdout.split(':')[1] | default('N/A') + ', esperado=' + item.item.value + ')' }}
+      loop: "{{ sysctl_audit.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    # --------------------------------------------------------------------------
+    # Remediación: crear/actualizar archivo sysctl en /etc/sysctl.d/
+    # --------------------------------------------------------------------------
+    - name: Crear archivo de configuración sysctl CIS
+      ansible.builtin.copy:
+        dest: "{{ sysctl_config_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # ==========================================================
+          # CIS Benchmark - Hardening de parámetros del kernel
+          # Gestionado por Ansible - No editar manualmente
+          # ==========================================================
+
+          # CIS 1.5.2 - ASLR habilitado
+          # Referencia: NIST SP 800-53 Rev. 5: CM-6 | MITRE: T1068/TA0002/M1050
+          kernel.randomize_va_space = 2
+
+          # CIS 1.5.3 - ptrace restringido al mismo proceso/hijo
+          # Referencia: NIST SP 800-53 Rev. 5: CM-6 | MITRE: T1055/TA0002/M1050
+          kernel.yama.ptrace_scope = 1
+      notify: Recargar sysctl
+
+    # --------------------------------------------------------------------------
+    # Aplicar parámetros de forma inmediata (sin reinicio)
+    # --------------------------------------------------------------------------
+    - name: Aplicar parámetros sysctl inmediatamente con sysctl -w
+      ansible.builtin.shell: sysctl -w {{ item.name }}={{ item.value }}
+      loop: "{{ cis_kernel_parameters }}"
+      loop_control:
+        label: "{{ item.name }}={{ item.value }}"
+      changed_when: true
+      failed_when: false
+
+    # --------------------------------------------------------------------------
+    # Verificación final post-remediación
+    # --------------------------------------------------------------------------
+    - name: Verificación final de parámetros sysctl
+      ansible.builtin.shell: |
+        current=$(sysctl -n {{ item.name }} 2>/dev/null)
+        [ "$current" = "{{ item.value }}" ] && echo "PASS" || echo "FAIL:$current"
+      loop: "{{ cis_kernel_parameters }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: sysctl_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final de auditoría CIS 1.5
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {{ 'PASS ✓' if item.stdout == 'PASS'
+             else 'FAIL ✗ - valor actual: ' + item.stdout.split(':')[1] | default('N/A') }}
+      loop: "{{ sysctl_final.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+  handlers:
+    - name: Recargar sysctl
+      ansible.builtin.command: sysctl --system
+      failed_when: false
+
+# =============================================================================
+# PLAY 7: CIS 2.2 - Desinstalar servicios innecesarios
+# Controles: 2.2.2 | 2.2.4 | 2.2.5 | 2.2.6 | 2.2.7 | 2.2.8 | 2.2.9 | 2.2.10 | 2.2.11
+# Referencia: NIST SP 800-53 Rev. 5: CM-7, SI-4
+# CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1203,T1210,T1543/TA0008/M1042
+# NOTA: Este play está orientado a sistemas Debian/Ubuntu (apt)
+# =============================================================================
+- name: CIS 2.2 - Desinstalar servicios de red innecesarios
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # Lista de paquetes a desinstalar según CIS 2.2.x
+    # Cada entrada incluye el control CIS, el paquete y si requiere
+    # detener servicios antes de purgar (pre_stop_services)
+    cis_unnecessary_services:
+      - cis_control: "2.2.2"
+        description: "Avahi - Zeroconf/mDNS service discovery"
+        packages:
+          - avahi-daemon
+        pre_stop_services:
+          - avahi-daemon.service
+          - avahi-daemon.socket
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "SI-4"
+
+      - cis_control: "2.2.4"
+        description: "DHCP Server - Asignación dinámica de IPs"
+        packages:
+          - isc-dhcp-server
+        pre_stop_services:
+          - isc-dhcp-server.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.5"
+        description: "LDAP Server - Directorio de red (OpenLDAP)"
+        packages:
+          - slapd
+        pre_stop_services:
+          - slapd.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.6"
+        description: "NFS Server - Network File System"
+        packages:
+          - nfs-kernel-server
+        pre_stop_services:
+          - nfs-server.service
+        mitre: "T1005,T1039,T1083,T1135,T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.7"
+        description: "DNS Server - Servidor de nombres (BIND9)"
+        packages:
+          - bind9
+        pre_stop_services:
+          - named.service
+          - bind9.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.8"
+        description: "FTP Server - Protocolo de transferencia de archivos (vsftpd)"
+        packages:
+          - vsftpd
+        pre_stop_services:
+          - vsftpd.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.9"
+        description: "HTTP Server - Servidor web Apache2"
+        packages:
+          - apache2
+        pre_stop_services:
+          - apache2.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.10"
+        description: "IMAP/POP3 Server - Servidor de correo entrante (Dovecot)"
+        packages:
+          - dovecot-imapd
+          - dovecot-pop3d
+        pre_stop_services:
+          - dovecot.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.11"
+        description: "Samba - Compartición de archivos SMB/CIFS con Windows"
+        packages:
+          - samba
+        pre_stop_services:
+          - smbd.service
+          - nmbd.service
+        mitre: "T1005,T1039,T1083,T1135,T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-6, CM-7"
+
+      - cis_control: "2.2.12"
+        description: "HTTP Proxy Server - Proxy Squid"
+        packages:
+          - squid
+        pre_stop_services:
+          - squid.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-6, CM-7"
+
+      - cis_control: "2.2.13"
+        description: "SNMP Server - Simple Network Management Protocol (snmpd)"
+        packages:
+          - snmpd
+        pre_stop_services:
+          - snmpd.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+      - cis_control: "2.2.14"
+        description: "NIS Server - Network Information Service (Yellow Pages)"
+        packages:
+          - nis
+        pre_stop_services:
+          - nis.service
+          - rpcbind.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-6, CM-7"
+
+      - cis_control: "2.2.15"
+        description: "dnsmasq - DNS caching/forwarding y DHCP ligero"
+        packages:
+          - dnsmasq
+        pre_stop_services:
+          - dnsmasq.service
+        mitre: "T1203,T1210,T1543.002/TA0008/M1042"
+        nist: "CM-7"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Solo aplica a sistemas Debian/Ubuntu
+    # --------------------------------------------------------------------------
+    - name: Verificar que el sistema es Debian/Ubuntu (apt)
+      ansible.builtin.assert:
+        that: ansible_os_family == 'Debian'
+        fail_msg: >-
+          Este play requiere un sistema basado en Debian/Ubuntu (apt).
+          Para RedHat/CentOS, adaptar los nombres de paquetes y usar 'dnf purge'.
+        success_msg: "Sistema Debian/Ubuntu confirmado. Continuando con la remediación."
+
+    # --------------------------------------------------------------------------
+    # Auditoría previa: verificar paquetes instalados
+    # --------------------------------------------------------------------------
+    - name: Auditar paquetes innecesarios instalados
+      ansible.builtin.shell: |
+        installed=""
+        {% for pkg in item.packages %}
+        status=$(dpkg-query -W -f='${db:Status-Status}' {{ pkg }} 2>/dev/null || echo "not-installed")
+        if [ "$status" = "installed" ]; then
+          installed="$installed {{ pkg }}"
+        fi
+        {% endfor %}
+        echo "${installed:-none}"
+      loop: "{{ cis_unnecessary_services }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.description }}"
+      register: pkg_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría de paquetes innecesarios
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.description }}:
+          {{ 'NO instalado ✓ - PASS' if item.stdout.strip() == 'none'
+             else 'INSTALADO ✗ - FAIL - Paquetes encontrados:' + item.stdout }}
+      loop: "{{ pkg_audit.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
+
+    # --------------------------------------------------------------------------
+    # Remediación: detener servicios activos antes de purgar
+    # --------------------------------------------------------------------------
+    - name: Detener servicios activos antes de purgar (si existen)
+      ansible.builtin.systemd:
+        name: "{{ service_item }}"
+        state: stopped
+        enabled: false
+      loop: "{{ cis_unnecessary_services | map(attribute='pre_stop_services') | flatten }}"
+      loop_control:
+        loop_var: service_item
+        label: "{{ service_item }}"
+      failed_when: false
+      changed_when: false
+
+    # --------------------------------------------------------------------------
+    # Remediación: purgar paquetes innecesarios
+    # --------------------------------------------------------------------------
+    - name: Purgar paquetes innecesarios (apt purge)
+      ansible.builtin.apt:
+        name: "{{ item.packages }}"
+        state: absent
+        purge: true
+        autoremove: true
+      loop: "{{ cis_unnecessary_services }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.packages | join(', ') }}"
+      register: purge_result
+      failed_when: false
+
+    - name: Mostrar resultado de la purga de paquetes
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] Purga de '{{ item.item.packages | join(', ') }}':
+          {{ 'Completada ✓' if item.failed == false else 'Error ✗ - ' + item.msg | default('revisar manualmente') }}
+      loop: "{{ purge_result.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
+
+    # --------------------------------------------------------------------------
+    # Verificación final
+    # --------------------------------------------------------------------------
+    - name: Verificación final - confirmar que los paquetes fueron eliminados
+      ansible.builtin.shell: |
+        still_installed=""
+        {% for pkg in item.packages %}
+        status=$(dpkg-query -W -f='${db:Status-Status}' {{ pkg }} 2>/dev/null || echo "not-installed")
+        if [ "$status" = "installed" ]; then
+          still_installed="$still_installed {{ pkg }}"
+        fi
+        {% endfor %}
+        echo "${still_installed:-none}"
+      loop: "{{ cis_unnecessary_services }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.description }}"
+      register: pkg_final_check
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final de auditoría CIS 2.2
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.description }}:
+          {{ 'PASS ✓ - No instalado' if item.stdout.strip() == 'none'
+             else 'FAIL ✗ - Aún instalado:' + item.stdout + ' - Revisar manualmente' }}
+      loop: "{{ pkg_final_check.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
+
+# =============================================================================
+# PLAY 8: CIS 2.2.16 - MTA (Postfix) configurado solo para correo local
+# Referencia: NIST SP 800-53 Rev. 5: CM-7
+# CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1018,T1210/TA0008/M1042
+# =============================================================================
+- name: CIS 2.2.16 - Configurar MTA (Postfix) en modo local-only
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    postfix_main_cf: /etc/postfix/main.cf
+    postfix_inet_interfaces: loopback-only
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Verificar si Postfix está instalado
+    # --------------------------------------------------------------------------
+    - name: Verificar si postfix está instalado
+      ansible.builtin.shell: |
+        dpkg-query -W -f='${db:Status-Status}' postfix 2>/dev/null || echo "not-installed"
+      register: postfix_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Informar si postfix no está instalado
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 2.2.16] Postfix no está instalado en este sistema.
+          Si existe otro MTA (ej: exim4, sendmail), configurar manualmente
+          para escuchar solo en loopback (127.0.0.1 / ::1).
+      when: postfix_installed.stdout != 'installed'
+
+    # --------------------------------------------------------------------------
+    # Auditoría: verificar si el MTA escucha en interfaces no-loopback en puerto 25
+    # --------------------------------------------------------------------------
+    - name: Auditar si el MTA escucha en interfaces externas (puerto 25)
+      ansible.builtin.shell: |
+        ss -lntu | grep -P ':25\b' | grep -Pv '\h+(127\.0\.0\.1|\[?::1\]?):25\b'
+      register: mta_external_listen
+      changed_when: false
+      failed_when: false
+      when: postfix_installed.stdout == 'installed'
+
+    - name: Mostrar resultado de auditoría CIS 2.2.16
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 2.2.16] MTA escuchando en interfaces externas (puerto 25):
+          {{ 'NO ✓ - Solo loopback - PASS' if mta_external_listen.stdout == ''
+             else 'SÍ ✗ - FAIL - Interfaces detectadas: ' + mta_external_listen.stdout }}
+      when: postfix_installed.stdout == 'installed'
+
+    # --------------------------------------------------------------------------
+    # Remediación: configurar inet_interfaces = loopback-only en main.cf
+    # --------------------------------------------------------------------------
+    - name: Verificar valor actual de inet_interfaces en main.cf
+      ansible.builtin.shell: |
+        grep -P '^\s*inet_interfaces\s*=' {{ postfix_main_cf }} || echo "not_set"
+      register: postfix_inet_current
+      changed_when: false
+      failed_when: false
+      when: postfix_installed.stdout == 'installed'
+
+    - name: Establecer inet_interfaces = loopback-only en main.cf (si ya existe la línea)
+      ansible.builtin.replace:
+        path: "{{ postfix_main_cf }}"
+        regexp: '^\s*inet_interfaces\s*=.*$'
+        replace: 'inet_interfaces = loopback-only'
+        backup: true
+      when:
+        - postfix_installed.stdout == 'installed'
+        - postfix_inet_current.stdout != 'not_set'
+        - "'loopback-only' not in postfix_inet_current.stdout"
+      notify: Reiniciar postfix
+
+    - name: Agregar inet_interfaces = loopback-only en main.cf (si no existe la línea)
+      ansible.builtin.lineinfile:
+        path: "{{ postfix_main_cf }}"
+        regexp: '^\s*inet_interfaces\s*='
+        line: 'inet_interfaces = loopback-only'
+        insertafter: '# RECEIVING MAIL'
+        state: present
+        backup: true
+      when:
+        - postfix_installed.stdout == 'installed'
+        - postfix_inet_current.stdout == 'not_set'
+      notify: Reiniciar postfix
+
+    # --------------------------------------------------------------------------
+    # Verificación final
+    # --------------------------------------------------------------------------
+    - name: Verificación final - MTA escuchando solo en loopback
+      ansible.builtin.shell: |
+        ss -lntu | grep -P ':25\b' | grep -Pv '\h+(127\.0\.0\.1|\[?::1\]?):25\b'
+      register: mta_final_check
+      changed_when: false
+      failed_when: false
+      when: postfix_installed.stdout == 'installed'
+
+    - name: Verificación final - valor inet_interfaces en main.cf
+      ansible.builtin.shell: |
+        grep -P '^\s*inet_interfaces\s*=' {{ postfix_main_cf }}
+      register: postfix_inet_final
+      changed_when: false
+      failed_when: false
+      when: postfix_installed.stdout == 'installed'
+
+    - name: Resumen final de auditoría CIS 2.2.16
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 2.2.16] inet_interfaces en main.cf: {{ postfix_inet_final.stdout | default('N/A') }}"
+          - "[CIS 2.2.16] Puerto 25 en interfaces externas: {{ 'PASS ✓ - Ninguna' if mta_final_check.stdout == '' else 'FAIL ✗ - ' + mta_final_check.stdout }}"
+      when: postfix_installed.stdout == 'installed'
+
+  handlers:
+    - name: Reiniciar postfix
+      ansible.builtin.systemd:
+        name: postfix
+        state: restarted
+      failed_when: false
+
+# =============================================================================
+# PLAY 9: CIS 3.1 - Interfaces de red inalámbricas y Bluetooth
+#   3.1.2 - Deshabilitar interfaces wireless (módulos del kernel)
+#   3.1.3 - Deshabilitar Bluetooth (systemctl mask)
+# Referencia: NIST SP 800-53 Rev. 5: CM-7
+# CIS Controls v8: 4.8 | v7: 15.4, 15.5, 9.2 | MITRE: T1011,T1595/TA0010/M1028
+# =============================================================================
+- name: CIS 3.1 - Deshabilitar interfaces wireless y Bluetooth
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # CIS 3.1.2 - Interfaces wireless
+    # --------------------------------------------------------------------------
+    - name: Detectar módulos de kernel de interfaces wireless activas
+      ansible.builtin.shell: |
+        if [ -n "$(find /sys/class/net/*/ -type d -name wireless 2>/dev/null)" ]; then
+          for driverdir in $(find /sys/class/net/*/ -type d -name wireless | xargs -0 dirname 2>/dev/null); do
+            basename "$(readlink -f "$driverdir"/device/driver/module)" 2>/dev/null
+          done | sort -u
+        else
+          echo "none"
+        fi
+      register: wireless_modules
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar interfaces wireless detectadas
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 3.1.2] Módulos wireless detectados:
+          {{ wireless_modules.stdout if wireless_modules.stdout != 'none' else 'Ninguno - No se requiere acción ✓' }}
+
+    - name: Crear archivo modprobe para deshabilitar módulo wireless (install /bin/false)
+      ansible.builtin.lineinfile:
+        path: "/etc/modprobe.d/{{ item }}.conf"
+        line: "install {{ item }} /bin/false"
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ wireless_modules.stdout_lines }}"
+      when:
+        - wireless_modules.stdout != 'none'
+        - wireless_modules.stdout != ''
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Agregar módulo wireless a denylist (blacklist)
+      ansible.builtin.lineinfile:
+        path: "/etc/modprobe.d/{{ item }}.conf"
+        line: "blacklist {{ item }}"
+        create: true
+        owner: root
+        group: root
+        mode: '0644'
+      loop: "{{ wireless_modules.stdout_lines }}"
+      when:
+        - wireless_modules.stdout != 'none'
+        - wireless_modules.stdout != ''
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Descargar módulo wireless del kernel si está cargado
+      community.general.modprobe:
+        name: "{{ item }}"
+        state: absent
+      loop: "{{ wireless_modules.stdout_lines }}"
+      when:
+        - wireless_modules.stdout != 'none'
+        - wireless_modules.stdout != ''
+      failed_when: false
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Verificación final CIS 3.1.2 - módulos wireless no cargados
+      ansible.builtin.shell: |
+        lsmod | grep -w "{{ item }}" && echo "LOADED" || echo "NOT_LOADED"
+      loop: "{{ wireless_modules.stdout_lines }}"
+      when:
+        - wireless_modules.stdout != 'none'
+        - wireless_modules.stdout != ''
+      register: wireless_final
+      changed_when: false
+      failed_when: false
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Resumen final CIS 3.1.2
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 3.1.2] Módulo wireless '{{ item.item }}':
+          {{ 'PASS ✓ - No cargado' if item.stdout == 'NOT_LOADED' else 'FAIL ✗ - Aún cargado' }}
+      loop: "{{ wireless_final.results | default([]) }}"
+      when: wireless_modules.stdout != 'none'
+      loop_control:
+        label: "{{ item.item }}"
+
+    # --------------------------------------------------------------------------
+    # CIS 3.1.3 - Bluetooth
+    # --------------------------------------------------------------------------
+    - name: Auditar estado del servicio Bluetooth
+      ansible.builtin.shell: |
+        enabled=$(systemctl is-enabled bluetooth.service 2>/dev/null || echo "not-found")
+        active=$(systemctl is-active bluetooth.service 2>/dev/null || echo "not-found")
+        echo "enabled=$enabled active=$active"
+      register: bluetooth_status
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar estado actual de Bluetooth
+      ansible.builtin.debug:
+        msg: "[CIS 3.1.3] Estado Bluetooth: {{ bluetooth_status.stdout }}"
+
+    - name: Detener y enmascarar el servicio Bluetooth
+      ansible.builtin.systemd:
+        name: bluetooth.service
+        state: stopped
+        enabled: false
+        masked: true
+      failed_when: false
+      when: "'not-found' not in bluetooth_status.stdout"
+
+    - name: Verificación final CIS 3.1.3 - Bluetooth deshabilitado
+      ansible.builtin.shell: |
+        enabled=$(systemctl is-enabled bluetooth.service 2>/dev/null | grep '^enabled' || echo "ok")
+        active=$(systemctl is-active bluetooth.service 2>/dev/null | grep '^active' || echo "ok")
+        echo "enabled_check=$enabled active_check=$active"
+      register: bluetooth_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final CIS 3.1.3
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 3.1.3] Bluetooth enabled: {{ 'PASS ✓' if 'enabled_check=ok' in bluetooth_final.stdout else 'FAIL ✗ - Aún habilitado' }}"
+          - "[CIS 3.1.3] Bluetooth active:  {{ 'PASS ✓' if 'active_check=ok' in bluetooth_final.stdout else 'FAIL ✗ - Aún activo' }}"
+
+# =============================================================================
+# PLAY 10: CIS 3.2 - Parámetros de red del host (sysctl)
+#   3.2.1 - Deshabilitar envío de ICMP redirects (send_redirects=0)
+#   3.2.2 - Deshabilitar IP forwarding (ip_forward=0, forwarding=0)
+# Referencia: NIST SP 800-53 Rev. 5: CM-1, CM-2, CM-6, CM-7, IA-5
+# CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1557/TA0006,TA0009/M1030,M1042
+# =============================================================================
+- name: CIS 3.2 - Parámetros de red del host (sysctl)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    sysctl_net_host_file: /etc/sysctl.d/61-cis_network_host.conf
+    cis_net_host_parameters:
+      - name: net.ipv4.conf.all.send_redirects
+        value: "0"
+        cis_control: "3.2.1"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.conf.default.send_redirects
+        value: "0"
+        cis_control: "3.2.1"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.ip_forward
+        value: "0"
+        cis_control: "3.2.2"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv6.conf.all.forwarding
+        value: "0"
+        cis_control: "3.2.2"
+        flush_cmd: "sysctl -w net.ipv6.route.flush=1"
+
+  tasks:
+
+    - name: Auditar parámetros sysctl de red del host
+      ansible.builtin.shell: |
+        ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
+        if echo "{{ item.name }}" | grep -q '^net.ipv6.' && [ "$ipv6_disabled" = "yes" ]; then
+          echo "IPV6_DISABLED"
+        else
+          current=$(sysctl -n {{ item.name }} 2>/dev/null)
+          [ "$current" = "{{ item.value }}" ] && echo "PASS" || echo "FAIL:$current"
+        fi
+      loop: "{{ cis_net_host_parameters }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: net_host_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría sysctl red host
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {% if item.stdout == 'PASS' %}CONFIGURADO ✓ (valor={{ item.item.value }})
+          {% elif item.stdout == 'IPV6_DISABLED' %}N/A - IPv6 deshabilitado en el sistema
+          {% else %}INCORRECTO ✗ (actual={{ item.stdout.split(':')[1] | default('N/A') }}, esperado={{ item.item.value }}){% endif %}
+      loop: "{{ net_host_audit.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Crear archivo sysctl para parámetros de red del host
+      ansible.builtin.copy:
+        dest: "{{ sysctl_net_host_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # ===========================================================
+          # CIS Benchmark - Parámetros de red del host
+          # Gestionado por Ansible - No editar manualmente
+          # ===========================================================
+
+          # CIS 3.2.1 - Deshabilitar envío de ICMP redirects
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1557/TA0006/M1030
+          net.ipv4.conf.all.send_redirects = 0
+          net.ipv4.conf.default.send_redirects = 0
+
+          # CIS 3.2.2 - Deshabilitar IP forwarding (IPv4 e IPv6)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1557/TA0009/M1042
+          net.ipv4.ip_forward = 0
+          net.ipv6.conf.all.forwarding = 0
+      notify: Recargar sysctl red host
+
+    - name: Aplicar parámetros sysctl de red del host inmediatamente
+      ansible.builtin.shell: |
+        ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
+        if echo "{{ item.name }}" | grep -q '^net.ipv6.' && [ "$ipv6_disabled" = "yes" ]; then
+          echo "skipped - IPv6 disabled"
+        else
+          sysctl -w {{ item.name }}={{ item.value }}
+          {{ item.flush_cmd }}
+        fi
+      loop: "{{ cis_net_host_parameters }}"
+      loop_control:
+        label: "{{ item.name }}={{ item.value }}"
+      changed_when: true
+      failed_when: false
+
+    - name: Verificación final sysctl red host
+      ansible.builtin.shell: |
+        ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
+        if echo "{{ item.name }}" | grep -q '^net.ipv6.' && [ "$ipv6_disabled" = "yes" ]; then
+          echo "IPV6_DISABLED"
+        else
+          current=$(sysctl -n {{ item.name }} 2>/dev/null)
+          [ "$current" = "{{ item.value }}" ] && echo "PASS" || echo "FAIL:$current"
+        fi
+      loop: "{{ cis_net_host_parameters }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: net_host_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final auditoría CIS 3.2
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {% if item.stdout == 'PASS' %}PASS ✓
+          {% elif item.stdout == 'IPV6_DISABLED' %}N/A - IPv6 deshabilitado
+          {% else %}FAIL ✗ - valor actual: {{ item.stdout.split(':')[1] | default('N/A') }}{% endif %}
+      loop: "{{ net_host_final.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+  handlers:
+    - name: Recargar sysctl red host
+      ansible.builtin.command: sysctl --system
+      failed_when: false
+
+# =============================================================================
+# PLAY 11: CIS 3.3 - Parámetros de red (host y router) (sysctl)
+#   3.3.1 - No aceptar source routed packets
+#   3.3.2 - No aceptar ICMP redirects
+# Referencia: NIST SP 800-53 Rev. 5: CM-1, CM-2, CM-6, CM-7, IA-5
+# CIS Controls v8: 4.8 | v7: 9.2 | MITRE: T1590,T1557/TA0006,TA0007/M1030
+# =============================================================================
+- name: CIS 3.3 - Parámetros de red host y router (sysctl)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    sysctl_net_router_file: /etc/sysctl.d/62-cis_network_router.conf
+    cis_net_router_parameters:
+      - name: net.ipv4.conf.all.accept_source_route
+        value: "0"
+        cis_control: "3.3.1"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.conf.default.accept_source_route
+        value: "0"
+        cis_control: "3.3.1"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv6.conf.all.accept_source_route
+        value: "0"
+        cis_control: "3.3.1"
+        flush_cmd: "sysctl -w net.ipv6.route.flush=1"
+      - name: net.ipv6.conf.default.accept_source_route
+        value: "0"
+        cis_control: "3.3.1"
+        flush_cmd: "sysctl -w net.ipv6.route.flush=1"
+      - name: net.ipv4.conf.all.accept_redirects
+        value: "0"
+        cis_control: "3.3.2"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.conf.default.accept_redirects
+        value: "0"
+        cis_control: "3.3.2"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv6.conf.all.accept_redirects
+        value: "0"
+        cis_control: "3.3.2"
+        flush_cmd: "sysctl -w net.ipv6.route.flush=1"
+      - name: net.ipv6.conf.default.accept_redirects
+        value: "0"
+        cis_control: "3.3.2"
+        flush_cmd: "sysctl -w net.ipv6.route.flush=1"
+      - name: net.ipv4.conf.all.log_martians
+        value: "1"
+        cis_control: "3.3.4"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.conf.default.log_martians
+        value: "1"
+        cis_control: "3.3.4"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.icmp_echo_ignore_broadcasts
+        value: "1"
+        cis_control: "3.3.5"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.icmp_ignore_bogus_error_responses
+        value: "1"
+        cis_control: "3.3.6"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.conf.all.rp_filter
+        value: "1"
+        cis_control: "3.3.7"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.conf.default.rp_filter
+        value: "1"
+        cis_control: "3.3.7"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+      - name: net.ipv4.tcp_syncookies
+        value: "1"
+        cis_control: "3.3.8"
+        flush_cmd: "sysctl -w net.ipv4.route.flush=1"
+
+  tasks:
+
+    - name: Auditar parámetros sysctl de red (host y router)
+      ansible.builtin.shell: |
+        ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
+        if echo "{{ item.name }}" | grep -q '^net.ipv6.' && [ "$ipv6_disabled" = "yes" ]; then
+          echo "IPV6_DISABLED"
+        else
+          current=$(sysctl -n {{ item.name }} 2>/dev/null)
+          [ "$current" = "{{ item.value }}" ] && echo "PASS" || echo "FAIL:$current"
+        fi
+      loop: "{{ cis_net_router_parameters }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: net_router_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría sysctl red router
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {% if item.stdout == 'PASS' %}CONFIGURADO ✓ (valor={{ item.item.value }})
+          {% elif item.stdout == 'IPV6_DISABLED' %}N/A - IPv6 deshabilitado
+          {% else %}INCORRECTO ✗ (actual={{ item.stdout.split(':')[1] | default('N/A') }}, esperado={{ item.item.value }}){% endif %}
+      loop: "{{ net_router_audit.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Crear archivo sysctl para parámetros de red host y router
+      ansible.builtin.copy:
+        dest: "{{ sysctl_net_router_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # ===========================================================
+          # CIS Benchmark - Parámetros de red (host y router)
+          # Gestionado por Ansible - No editar manualmente
+          # ===========================================================
+
+          # CIS 3.3.1 - No aceptar source routed packets (IPv4)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1590/TA0007
+          net.ipv4.conf.all.accept_source_route = 0
+          net.ipv4.conf.default.accept_source_route = 0
+
+          # CIS 3.3.1 - No aceptar source routed packets (IPv6)
+          net.ipv6.conf.all.accept_source_route = 0
+          net.ipv6.conf.default.accept_source_route = 0
+
+          # CIS 3.3.2 - No aceptar ICMP redirects (IPv4)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1557/TA0006/M1030
+          net.ipv4.conf.all.accept_redirects = 0
+          net.ipv4.conf.default.accept_redirects = 0
+
+          # CIS 3.3.2 - No aceptar ICMP redirects (IPv6)
+          net.ipv6.conf.all.accept_redirects = 0
+          net.ipv6.conf.default.accept_redirects = 0
+
+          # CIS 3.3.4 - Registrar paquetes sospechosos (martians)
+          # NIST: AU-3 | MITRE: T1562.006/TA0005
+          net.ipv4.conf.all.log_martians = 1
+          net.ipv4.conf.default.log_martians = 1
+
+          # CIS 3.3.5 - Ignorar ICMP broadcast/multicast (anti-Smurf)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1498.001/TA0040/M1037
+          net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+          # CIS 3.3.6 - Ignorar respuestas ICMP bogus (RFC-1122 non-compliant)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1562.006/TA0040/M1053
+          net.ipv4.icmp_ignore_bogus_error_responses = 1
+
+          # CIS 3.3.7 - Habilitar Reverse Path Filtering (anti-spoofing)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1498.001/TA0006,TA0040/M1030
+          # NOTA: Deshabilitar si se usa enrutamiento asimétrico (BGP/OSPF)
+          net.ipv4.conf.all.rp_filter = 1
+          net.ipv4.conf.default.rp_filter = 1
+
+          # CIS 3.3.8 - Habilitar TCP SYN Cookies (anti-SYN flood / DoS)
+          # NIST: CM-1,CM-2,CM-6,CM-7,IA-5 | MITRE: T1499.001/TA0040/M1037
+          net.ipv4.tcp_syncookies = 1
+      notify: Recargar sysctl red router
+
+    - name: Aplicar parámetros sysctl de red (host y router) inmediatamente
+      ansible.builtin.shell: |
+        ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
+        if echo "{{ item.name }}" | grep -q '^net.ipv6.' && [ "$ipv6_disabled" = "yes" ]; then
+          echo "skipped - IPv6 disabled"
+        else
+          sysctl -w {{ item.name }}={{ item.value }}
+          {{ item.flush_cmd }}
+        fi
+      loop: "{{ cis_net_router_parameters }}"
+      loop_control:
+        label: "{{ item.name }}={{ item.value }}"
+      changed_when: true
+      failed_when: false
+
+    - name: Verificación final sysctl red router
+      ansible.builtin.shell: |
+        ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
+        if echo "{{ item.name }}" | grep -q '^net.ipv6.' && [ "$ipv6_disabled" = "yes" ]; then
+          echo "IPV6_DISABLED"
+        else
+          current=$(sysctl -n {{ item.name }} 2>/dev/null)
+          [ "$current" = "{{ item.value }}" ] && echo "PASS" || echo "FAIL:$current"
+        fi
+      loop: "{{ cis_net_router_parameters }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: net_router_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final auditoría CIS 3.3
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {% if item.stdout == 'PASS' %}PASS ✓
+          {% elif item.stdout == 'IPV6_DISABLED' %}N/A - IPv6 deshabilitado
+          {% else %}FAIL ✗ - valor actual: {{ item.stdout.split(':')[1] | default('N/A') }}{% endif %}
+      loop: "{{ net_router_final.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+  handlers:
+    - name: Recargar sysctl red router
+      ansible.builtin.command: sysctl --system
+      failed_when: false
+
+# =============================================================================
+# PLAY 12: CIS 4.1 - Control de acceso a schedulers (cron y at)
+#   4.1.8 - cron restringido a usuarios autorizados (/etc/cron.allow)
+#   4.1.9 - at restringido a usuarios autorizados (/etc/at.allow)
+# Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+# CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1053.003/TA0002/M1018
+# =============================================================================
+- name: CIS 4.1 - Restringir acceso a cron y at a usuarios autorizados
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    scheduler_controls:
+      - cis_control: "4.1.8"
+        name: "cron"
+        package: "cron"
+        allow_file: "/etc/cron.allow"
+        deny_file: "/etc/cron.deny"
+        owner: "root"
+        group: "crontab"
+        mode: "0640"
+        mask: "0137"
+      - cis_control: "4.1.9"
+        name: "at"
+        package: "at"
+        allow_file: "/etc/at.allow"
+        deny_file: "/etc/at.deny"
+        owner: "root"
+        group: "root"
+        mode: "0640"
+        mask: "0137"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Auditoría previa
+    # --------------------------------------------------------------------------
+    - name: Verificar si los schedulers están instalados
+      ansible.builtin.shell: |
+        dpkg-query -W {{ item.package }} > /dev/null 2>&1 && echo "installed" || echo "not-installed"
+      loop: "{{ scheduler_controls }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: scheduler_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Auditar archivos allow/deny de cada scheduler
+      ansible.builtin.shell: |
+        result=""
+        # Verificar deny file (no debe existir)
+        if [ -e "{{ item.deny_file }}" ]; then
+          result="$result DENY_EXISTS"
+        fi
+        # Verificar allow file (debe existir)
+        if [ ! -e "{{ item.allow_file }}" ]; then
+          result="$result ALLOW_MISSING"
+        else
+          mode=$(stat -Lc '%#a' "{{ item.allow_file }}")
+          owner=$(stat -Lc '%U' "{{ item.allow_file }}")
+          group=$(stat -Lc '%G' "{{ item.allow_file }}")
+          mask={{ item.mask }}
+          if [ $(( 8#$mode & 8#$mask )) -gt 0 ]; then
+            result="$result MODE_BAD:$mode"
+          fi
+          [ "$owner" != "{{ item.owner }}" ] && result="$result OWNER_BAD:$owner"
+          [ "$group" != "{{ item.group }}" ] && result="$result GROUP_BAD:$group"
+        fi
+        echo "${result:-OK}"
+      loop: "{{ scheduler_controls }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: scheduler_audit
+      changed_when: false
+      failed_when: false
+      when: >
+        scheduler_installed.results |
+        selectattr('item.name', 'equalto', item.name) |
+        map(attribute='stdout') | first == 'installed'
+
+    - name: Mostrar resultado de auditoría de schedulers
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}:
+          {{ 'CONFIGURADO ✓' if item.stdout | default('skipped') == 'OK'
+             else 'No instalado - No requiere acción ✓' if item.skipped | default(false)
+             else 'REQUIERE REMEDIACIÓN ✗ - ' + item.stdout | default('') }}
+      loop: "{{ scheduler_audit.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
+
+    # --------------------------------------------------------------------------
+    # Remediación: eliminar deny, crear allow con permisos correctos
+    # --------------------------------------------------------------------------
+    - name: Eliminar archivo deny si existe
+      ansible.builtin.file:
+        path: "{{ item.deny_file }}"
+        state: absent
+      loop: "{{ scheduler_controls }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.deny_file }}"
+      when: >
+        scheduler_installed.results |
+        selectattr('item.name', 'equalto', item.name) |
+        map(attribute='stdout') | first == 'installed'
+      failed_when: false
+
+    - name: Crear archivo allow si no existe
+      ansible.builtin.file:
+        path: "{{ item.allow_file }}"
+        state: touch
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+        modification_time: preserve
+        access_time: preserve
+      loop: "{{ scheduler_controls }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.allow_file }}"
+      when: >
+        scheduler_installed.results |
+        selectattr('item.name', 'equalto', item.name) |
+        map(attribute='stdout') | first == 'installed'
+      failed_when: false
+
+    - name: Asegurar permisos, propietario y grupo en archivo allow
+      ansible.builtin.file:
+        path: "{{ item.allow_file }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ scheduler_controls }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.allow_file }}"
+      when: >
+        scheduler_installed.results |
+        selectattr('item.name', 'equalto', item.name) |
+        map(attribute='stdout') | first == 'installed'
+      failed_when: false
+
+    # --------------------------------------------------------------------------
+    # Verificación final
+    # --------------------------------------------------------------------------
+    - name: Verificación final de archivos allow/deny
+      ansible.builtin.shell: |
+        result=""
+        [ -e "{{ item.deny_file }}" ] && result="$result DENY_EXISTS"
+        if [ ! -e "{{ item.allow_file }}" ]; then
+          result="$result ALLOW_MISSING"
+        else
+          mode=$(stat -Lc '%#a' "{{ item.allow_file }}")
+          owner=$(stat -Lc '%U' "{{ item.allow_file }}")
+          group=$(stat -Lc '%G' "{{ item.allow_file }}")
+          mask={{ item.mask }}
+          [ $(( 8#$mode & 8#$mask )) -gt 0 ] && result="$result MODE_BAD:$mode"
+          [ "$owner" != "{{ item.owner }}" ] && result="$result OWNER_BAD:$owner"
+          [ "$group" != "{{ item.group }}" ] && result="$result GROUP_BAD:$group"
+        fi
+        echo "${result:-OK}"
+      loop: "{{ scheduler_controls }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.name }}"
+      register: scheduler_final
+      changed_when: false
+      failed_when: false
+      when: >
+        scheduler_installed.results |
+        selectattr('item.name', 'equalto', item.name) |
+        map(attribute='stdout') | first == 'installed'
+
+    - name: Resumen final auditoría CIS 4.1.8 y 4.1.9
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.name }}
+          (allow={{ item.item.allow_file }}, owner={{ item.item.owner }}:{{ item.item.group }}, mode={{ item.item.mode }}):
+          {{ 'PASS ✓' if item.stdout | default('skipped') == 'OK'
+             else 'N/A - No instalado ✓' if item.skipped | default(false)
+             else 'FAIL ✗ - ' + item.stdout | default('') }}
+      loop: "{{ scheduler_final.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
+
+# =============================================================================
+# PLAY 13: CIS 4.3 - Hardening de sudo y su
+#   4.3.2 - sudo debe usar pseudo-terminal (use_pty)
+#   4.3.7 - Restringir comando su a grupo vacío (pam_wheel)
+# Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+# CIS Controls v8: 5.4, 3.3 | v7: 5.1, 14.6 | MITRE: T1078,T1548/TA0001,TA0003,TA0005
+# =============================================================================
+- name: CIS 4.3 - Hardening de sudo y restricción del comando su
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    sudoers_cis_file: /etc/sudoers.d/01-cis_hardening
+    su_pam_file: /etc/pam.d/su
+    # Nombre del grupo vacío para restringir su (CIS 4.3.7)
+    # Cambiar según política del sitio
+    su_restrict_group: "{{ su_group_name | default('sugroup') }}"
+
+  tasks:
+
+    # ==========================================================================
+    # CIS 4.3.2 - sudo use_pty
+    # ==========================================================================
+
+    - name: Auditar si 'Defaults use_pty' está configurado en sudoers
+      ansible.builtin.shell: |
+        grep -rPi '^\s*Defaults\s+([^#\n\r]+,)?use_pty(,\s*\S+\s*)*(#.*)?$' /etc/sudoers /etc/sudoers.d/ 2>/dev/null \
+          && echo "PASS" || echo "FAIL"
+      register: sudo_pty_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría CIS 4.3.2
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 4.3.2] Defaults use_pty en sudoers:
+          {{ 'CONFIGURADO ✓' if sudo_pty_audit.stdout == 'PASS' else 'FALTANTE ✗ - Se aplicará remediación' }}
+
+    - name: Crear archivo sudoers.d con Defaults use_pty (CIS 4.3.2)
+      ansible.builtin.copy:
+        dest: "{{ sudoers_cis_file }}"
+        owner: root
+        group: root
+        mode: '0440'
+        content: |
+          # ============================================================
+          # CIS 4.3.2 - sudo debe ejecutarse desde pseudo-terminal (pty)
+          # Previene que procesos maliciosos en background persistan tras
+          # finalizar el comando sudo.
+          # Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+          # MITRE: T1548.003/TA0001,TA0003/M1026
+          # ============================================================
+          Defaults use_pty
+      when: sudo_pty_audit.stdout == 'FAIL'
+      notify: Validar sintaxis sudoers
+
+    - name: Verificación final CIS 4.3.2
+      ansible.builtin.shell: |
+        grep -rPi '^\s*Defaults\s+([^#\n\r]+,)?use_pty(,\s*\S+\s*)*(#.*)?$' /etc/sudoers /etc/sudoers.d/ 2>/dev/null \
+          && echo "PASS" || echo "FAIL"
+      register: sudo_pty_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final CIS 4.3.2
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 4.3.2] Defaults use_pty:
+          {{ 'PASS ✓ - ' + sudo_pty_final.stdout_lines[0] | default('configurado')
+             if sudo_pty_final.stdout == 'PASS'
+             else 'FAIL ✗ - Revisar /etc/sudoers manualmente con visudo' }}
+
+    # ==========================================================================
+    # CIS 4.3.7 - Restringir su mediante pam_wheel + grupo vacío
+    # ==========================================================================
+
+    - name: Auditar si pam_wheel está configurado en /etc/pam.d/su
+      ansible.builtin.shell: |
+        grep -Pi '^\s*auth\s+(required|requisite)\s+pam_wheel\.so\s+.*use_uid\b.*group=\S+' \
+          {{ su_pam_file }} 2>/dev/null && echo "PASS" || echo "FAIL"
+      register: su_pam_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Auditar si el grupo de restricción de su existe y está vacío
+      ansible.builtin.shell: |
+        if getent group {{ su_restrict_group }} > /dev/null 2>&1; then
+          members=$(getent group {{ su_restrict_group }} | cut -d: -f4)
+          if [ -z "$members" ]; then
+            echo "GROUP_EMPTY"
+          else
+            echo "GROUP_HAS_MEMBERS:$members"
+          fi
+        else
+          echo "GROUP_MISSING"
+        fi
+      register: su_group_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría CIS 4.3.7
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 4.3.7] pam_wheel en /etc/pam.d/su: {{ 'CONFIGURADO ✓' if su_pam_audit.stdout == 'PASS' else 'FALTANTE ✗' }}"
+          - "[CIS 4.3.7] Grupo '{{ su_restrict_group }}': {{ su_group_audit.stdout }}"
+
+    - name: Crear grupo de restricción de su si no existe (CIS 4.3.7)
+      ansible.builtin.group:
+        name: "{{ su_restrict_group }}"
+        state: present
+        system: true
+      when: su_group_audit.stdout == 'GROUP_MISSING'
+
+    - name: Advertencia si el grupo de restricción de su tiene miembros
+      ansible.builtin.debug:
+        msg: >-
+          ADVERTENCIA [CIS 4.3.7]: El grupo '{{ su_restrict_group }}' tiene miembros:
+          {{ su_group_audit.stdout.split(':')[1] | default('') }}.
+          El grupo debe estar VACÍO para que la restricción de su sea efectiva.
+          Eliminar usuarios del grupo manualmente: gpasswd -d <usuario> {{ su_restrict_group }}
+      when: "'GROUP_HAS_MEMBERS' in su_group_audit.stdout"
+
+    - name: Configurar pam_wheel en /etc/pam.d/su para restringir su (CIS 4.3.7)
+      ansible.builtin.lineinfile:
+        path: "{{ su_pam_file }}"
+        regexp: '^\s*#?\s*auth\s+(required|requisite)\s+pam_wheel\.so.*'
+        line: "auth           required        pam_wheel.so use_uid group={{ su_restrict_group }}"
+        insertafter: '^# Uncomment this to force users to be a member'
+        state: present
+        backup: true
+      when: su_pam_audit.stdout == 'FAIL'
+
+    # --------------------------------------------------------------------------
+    # Verificación final CIS 4.3.7
+    # --------------------------------------------------------------------------
+    - name: Verificación final - pam_wheel en /etc/pam.d/su
+      ansible.builtin.shell: |
+        grep -Pi '^\s*auth\s+(required|requisite)\s+pam_wheel\.so\s+.*use_uid\b.*group=\S+' \
+          {{ su_pam_file }} 2>/dev/null && echo "PASS" || echo "FAIL"
+      register: su_pam_final
+      changed_when: false
+      failed_when: false
+
+    - name: Verificación final - grupo vacío para su
+      ansible.builtin.shell: |
+        members=$(getent group {{ su_restrict_group }} | cut -d: -f4)
+        [ -z "$members" ] && echo "EMPTY" || echo "HAS_MEMBERS:$members"
+      register: su_group_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final auditoría CIS 4.3.7
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 4.3.7] pam_wheel en /etc/pam.d/su: {{ 'PASS ✓' if su_pam_final.stdout == 'PASS' else 'FAIL ✗ - Revisar manualmente' }}"
+          - "[CIS 4.3.7] Grupo '{{ su_restrict_group }}' vacío: {{ 'PASS ✓' if su_group_final.stdout == 'EMPTY' else 'FAIL ✗ - ' + su_group_final.stdout }}"
+
+  handlers:
+    - name: Validar sintaxis sudoers
+      ansible.builtin.command: visudo -cf {{ sudoers_cis_file }}
+      register: visudo_check
+      failed_when: visudo_check.rc != 0
+      changed_when: false
+
+# =============================================================================
+# PLAY 14: CIS 4.5 - Seguridad de cuentas de sistema y umask
+#   4.5.2 - Cuentas de sistema sin shell de login y bloqueadas
+#   4.5.4 - umask por defecto 027 o más restrictivo
+# Referencia: NIST SP 800-53 Rev. 5: AC-2, AC-3, AC-5, MP-2
+# CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1078,T1565/TA0005
+# =============================================================================
+- name: CIS 4.5 - Seguridad de cuentas de sistema y umask por defecto
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    umask_value: "027"
+    login_defs_file: /etc/login.defs
+    pam_common_session: /etc/pam.d/common-session
+    umask_profile_file: /etc/profile.d/50-cis_umask.sh
+
+  tasks:
+
+    # ==========================================================================
+    # CIS 4.5.2 - Cuentas de sistema: shell nologin + bloqueadas
+    # ==========================================================================
+
+    - name: Obtener UID_MIN del sistema
+      ansible.builtin.shell: awk '/^\s*UID_MIN/{print $2}' {{ login_defs_file }}
+      register: uid_min
+      changed_when: false
+      failed_when: false
+
+    - name: Detectar cuentas de sistema con shell de login válida
+      ansible.builtin.shell: |
+        valid_shells="^($(awk -F/ '$NF != "nologin" {print}' /etc/shells | \
+          sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        awk -v pat="$valid_shells" -F: \
+          '($1!~/(root|sync|shutdown|halt|^\+)/ && $3<{{ uid_min.stdout }} && $(NF) ~ pat) \
+          { print $1 }' /etc/passwd
+      register: system_accounts_shell
+      changed_when: false
+      failed_when: false
+
+    - name: Detectar cuentas de sistema sin bloquear
+      ansible.builtin.shell: |
+        valid_shells="^($(awk -F/ '$NF != "nologin" {print}' /etc/shells | \
+          sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        awk -v pat="$valid_shells" -F: \
+          '($1!~/(root|^\+)/ && $2!~/LK?/ && $3<{{ uid_min.stdout }} && $(NF) ~ pat) \
+          { print $1 }' /etc/passwd
+      register: system_accounts_unlocked
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría CIS 4.5.2
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 4.5.2] Cuentas de sistema con shell válida: {{ system_accounts_shell.stdout_lines | default(['Ninguna ✓']) }}"
+          - "[CIS 4.5.2] Cuentas de sistema sin bloquear:    {{ system_accounts_unlocked.stdout_lines | default(['Ninguna ✓']) }}"
+
+    - name: Establecer shell nologin en cuentas de sistema con shell válida
+      ansible.builtin.user:
+        name: "{{ item }}"
+        shell: /usr/sbin/nologin
+      loop: "{{ system_accounts_shell.stdout_lines }}"
+      when: system_accounts_shell.stdout_lines | length > 0
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Bloquear cuentas de sistema que no están bloqueadas
+      ansible.builtin.user:
+        name: "{{ item }}"
+        password_lock: true
+      loop: "{{ system_accounts_unlocked.stdout_lines }}"
+      when: system_accounts_unlocked.stdout_lines | length > 0
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Verificación final CIS 4.5.2 - cuentas con shell válida post-remediación
+      ansible.builtin.shell: |
+        valid_shells="^($(awk -F/ '$NF != "nologin" {print}' /etc/shells | \
+          sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        awk -v pat="$valid_shells" -F: \
+          '($1!~/(root|sync|shutdown|halt|^\+)/ && $3<{{ uid_min.stdout }} && $(NF) ~ pat) \
+          { print $1 }' /etc/passwd
+      register: system_shell_final
+      changed_when: false
+      failed_when: false
+
+    - name: Verificación final CIS 4.5.2 - cuentas sin bloquear post-remediación
+      ansible.builtin.shell: |
+        valid_shells="^($(awk -F/ '$NF != "nologin" {print}' /etc/shells | \
+          sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        awk -v pat="$valid_shells" -F: \
+          '($1!~/(root|^\+)/ && $2!~/LK?/ && $3<{{ uid_min.stdout }} && $(NF) ~ pat) \
+          { print $1 }' /etc/passwd
+      register: system_lock_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final CIS 4.5.2
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 4.5.2] Cuentas con shell válida: {{ 'PASS ✓ - Ninguna' if system_shell_final.stdout == '' else 'FAIL ✗ - ' + system_shell_final.stdout }}"
+          - "[CIS 4.5.2] Cuentas sin bloquear:     {{ 'PASS ✓ - Ninguna' if system_lock_final.stdout == '' else 'FAIL ✗ - ' + system_lock_final.stdout }}"
+
+    # ==========================================================================
+    # CIS 4.5.4 - umask por defecto 027 o más restrictivo
+    # ==========================================================================
+
+    - name: Auditar umask en /etc/login.defs
+      ansible.builtin.shell: |
+        grep -Ei '^\s*UMASK\s+' {{ login_defs_file }} | head -1 || echo "NOT_SET"
+      register: umask_login_defs
+      changed_when: false
+      failed_when: false
+
+    - name: Auditar USERGROUPS_ENAB en /etc/login.defs
+      ansible.builtin.shell: |
+        grep -Ei '^\s*USERGROUPS_ENAB\s+' {{ login_defs_file }} | head -1 || echo "NOT_SET"
+      register: usergroups_enab
+      changed_when: false
+      failed_when: false
+
+    - name: Auditar pam_umask en /etc/pam.d/common-session
+      ansible.builtin.shell: |
+        grep -Eq '^\s*session\s+(optional|requisite|required)\s+pam_umask\.so\b' \
+          {{ pam_common_session }} && echo "PASS" || echo "FAIL"
+      register: pam_umask_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Auditar umask permisivo existente en archivos de perfil
+      ansible.builtin.shell: |
+        grep -RPi \
+          '(^|^[^#]*)\s*umask\s+([0-7][0-7][01][0-7]\b|[0-7][0-7][0-7][0-6]\b|[0-7][01][0-7]\b|[0-7][0-7][0-6]\b)' \
+          /etc/login.defs /etc/profile* /etc/bash.bashrc* 2>/dev/null || echo "none"
+      register: umask_permissive_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría CIS 4.5.4
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 4.5.4] UMASK en login.defs:       {{ umask_login_defs.stdout }}"
+          - "[CIS 4.5.4] USERGROUPS_ENAB en login.defs: {{ usergroups_enab.stdout }}"
+          - "[CIS 4.5.4] pam_umask en common-session: {{ 'CONFIGURADO ✓' if pam_umask_audit.stdout == 'PASS' else 'FALTANTE ✗' }}"
+          - "[CIS 4.5.4] umask permisivos detectados: {{ umask_permissive_audit.stdout }}"
+
+    - name: Configurar UMASK 027 en /etc/login.defs
+      ansible.builtin.replace:
+        path: "{{ login_defs_file }}"
+        regexp: '^\s*UMASK\s+\S+.*$'
+        replace: "UMASK           {{ umask_value }}"
+        backup: true
+
+    - name: Configurar USERGROUPS_ENAB no en /etc/login.defs
+      ansible.builtin.replace:
+        path: "{{ login_defs_file }}"
+        regexp: '^\s*USERGROUPS_ENAB\s+\S+.*$'
+        replace: "USERGROUPS_ENAB no"
+        backup: true
+
+    - name: Asegurar pam_umask.so en /etc/pam.d/common-session
+      ansible.builtin.lineinfile:
+        path: "{{ pam_common_session }}"
+        regexp: '^\s*session\s+\S+\s+pam_umask\.so'
+        line: "session optional pam_umask.so"
+        state: present
+        backup: true
+      when: pam_umask_audit.stdout == 'FAIL'
+
+    - name: Crear /etc/profile.d/50-cis_umask.sh con umask 027
+      ansible.builtin.copy:
+        dest: "{{ umask_profile_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # ============================================================
+          # CIS 4.5.4 - umask por defecto 027 (o más restrictivo)
+          # Aplica a todas las shells de login interactivas
+          # Permisos resultado: directorios 750 (drwxr-x---), archivos 640 (rw-r-----)
+          # Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+          # MITRE: T1565.001/TA0005
+          # ============================================================
+          umask {{ umask_value }}
+
+    # --------------------------------------------------------------------------
+    # Verificación final CIS 4.5.4
+    # --------------------------------------------------------------------------
+    - name: Verificación final - UMASK en login.defs
+      ansible.builtin.shell: |
+        grep -Ei '^\s*UMASK\s+0?27\b' {{ login_defs_file }} && echo "PASS" || echo "FAIL"
+      register: umask_final_logindefs
+      changed_when: false
+      failed_when: false
+
+    - name: Verificación final - USERGROUPS_ENAB en login.defs
+      ansible.builtin.shell: |
+        grep -Ei '^\s*USERGROUPS_ENAB\s+"?no"?\b' {{ login_defs_file }} && echo "PASS" || echo "FAIL"
+      register: usergroups_final
+      changed_when: false
+      failed_when: false
+
+    - name: Verificación final - pam_umask en common-session
+      ansible.builtin.shell: |
+        grep -Eq '^\s*session\s+(optional|requisite|required)\s+pam_umask\.so\b' \
+          {{ pam_common_session }} && echo "PASS" || echo "FAIL"
+      register: pam_umask_final
+      changed_when: false
+      failed_when: false
+
+    - name: Verificación final - umask en profile.d
+      ansible.builtin.shell: |
+        grep -q "umask {{ umask_value }}" {{ umask_profile_file }} && echo "PASS" || echo "FAIL"
+      register: umask_profile_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final auditoría CIS 4.5.4
+      ansible.builtin.debug:
+        msg:
+          - "[CIS 4.5.4] UMASK 027 en login.defs:         {{ 'PASS ✓' if umask_final_logindefs.stdout == 'PASS' else 'FAIL ✗' }}"
+          - "[CIS 4.5.4] USERGROUPS_ENAB=no en login.defs: {{ 'PASS ✓' if usergroups_final.stdout == 'PASS' else 'FAIL ✗' }}"
+          - "[CIS 4.5.4] pam_umask en common-session:      {{ 'PASS ✓' if pam_umask_final.stdout == 'PASS' else 'FAIL ✗' }}"
+          - "[CIS 4.5.4] umask 027 en profile.d:           {{ 'PASS ✓' if umask_profile_final.stdout == 'PASS' else 'FAIL ✗' }}"
+
+# =============================================================================
+# PLAY 15: CIS 5.1.1.4 - journald configurado para escritura persistente en disco
+# Referencia: NIST SP 800-53 Rev. 5: AU-3, AU-12
+# CIS Controls v8: 8.2 | v7: 6.2, 6.3 | MITRE: T1070.002,T1562.006/TA0005/M1022
+# =============================================================================
+- name: CIS 5.1.1.4 - journald con almacenamiento persistente en disco
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    journald_conf_file: /etc/systemd/journald.conf.d/50-cis_persistent.conf
+
+  tasks:
+
+    - name: Auditar Storage=persistent en journald
+      ansible.builtin.shell: |
+        grep -Psi '^\s*Storage\s*=\s*persistent\b' \
+          /etc/systemd/journald.conf /etc/systemd/journald.conf.d/*.conf 2>/dev/null \
+          && echo "PASS" || echo "FAIL"
+      register: journald_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría CIS 5.1.1.4
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 5.1.1.4] journald Storage=persistent:
+          {{ 'CONFIGURADO ✓' if journald_audit.stdout == 'PASS' else 'FALTANTE ✗ - Se aplicará remediación' }}
+
+    - name: Crear directorio journald.conf.d si no existe
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Crear configuración journald con Storage=persistent
+      ansible.builtin.copy:
+        dest: "{{ journald_conf_file }}"
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # ============================================================
+          # CIS 5.1.1.4 - journald: escritura persistente en disco
+          # Los logs sobreviven reinicios del sistema.
+          # NOTA: systemd < v243 puede tener bug con Storage=persistent
+          # en /etc/systemd/journald.conf. Se usa journald.conf.d/ para
+          # evitar este problema.
+          # Referencia: NIST SP 800-53 Rev. 5: AU-3, AU-12
+          # MITRE: T1070.002,T1562.006/TA0005/M1022
+          # ============================================================
+          [Journal]
+          Storage=persistent
+      notify: Reiniciar systemd-journald
+
+    - name: Verificación final CIS 5.1.1.4
+      ansible.builtin.shell: |
+        grep -Psi '^\s*Storage\s*=\s*persistent\b' \
+          /etc/systemd/journald.conf /etc/systemd/journald.conf.d/*.conf 2>/dev/null \
+          && echo "PASS" || echo "FAIL"
+      register: journald_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final CIS 5.1.1.4
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 5.1.1.4] journald Storage=persistent:
+          {{ 'PASS ✓ - Logs persistentes en disco' if journald_final.stdout == 'PASS'
+             else 'FAIL ✗ - Revisar ' + journald_conf_file }}
+
+  handlers:
+    - name: Reiniciar systemd-journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+      failed_when: false
+
+# =============================================================================
+# PLAY 16: CIS 6.1 - Permisos en archivos críticos de sistema
+#   6.1.1 - /etc/passwd        (644 root:root)
+#   6.1.2 - /etc/passwd-       (644 root:root)
+#   6.1.3 - /etc/group         (644 root:root)
+#   6.1.4 - /etc/group-        (644 root:root)
+#   6.1.5 - /etc/shadow        (640 root:shadow)
+#   6.1.6 - /etc/shadow-       (640 root:shadow)
+#   6.1.7 - /etc/gshadow       (640 root:shadow)
+# Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+# CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1003.008,T1222.002/TA0005/M1022
+# =============================================================================
+- name: CIS 6.1 - Permisos en archivos críticos de cuentas del sistema
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    critical_files:
+      - cis_control: "6.1.1"
+        path: /etc/passwd
+        owner: root
+        group: root
+        mode: "0644"
+        mode_mask: "0133"    # u-x,go-wx
+      - cis_control: "6.1.2"
+        path: /etc/passwd-
+        owner: root
+        group: root
+        mode: "0644"
+        mode_mask: "0133"
+      - cis_control: "6.1.3"
+        path: /etc/group
+        owner: root
+        group: root
+        mode: "0644"
+        mode_mask: "0133"
+      - cis_control: "6.1.4"
+        path: /etc/group-
+        owner: root
+        group: root
+        mode: "0644"
+        mode_mask: "0133"
+      - cis_control: "6.1.5"
+        path: /etc/shadow
+        owner: root
+        group: shadow
+        mode: "0640"
+        mode_mask: "0137"    # u-x,g-wx,o-rwx
+      - cis_control: "6.1.6"
+        path: /etc/shadow-
+        owner: root
+        group: shadow
+        mode: "0640"
+        mode_mask: "0137"
+      - cis_control: "6.1.7"
+        path: /etc/gshadow
+        owner: root
+        group: shadow
+        mode: "0640"
+        mode_mask: "0137"
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # Auditoría previa
+    # --------------------------------------------------------------------------
+    - name: Auditar permisos actuales de archivos críticos
+      ansible.builtin.shell: |
+        if [ -e "{{ item.path }}" ]; then
+          stat -Lc '%n %#a %U %G' "{{ item.path }}"
+        else
+          echo "NOT_FOUND {{ item.path }}"
+        fi
+      loop: "{{ critical_files }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.path }}"
+      register: files_audit
+      changed_when: false
+      failed_when: false
+
+    - name: Mostrar resultado de auditoría CIS 6.1
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.path }}
+          (esperado: mode={{ item.item.mode }} owner={{ item.item.owner }}:{{ item.item.group }}):
+          {{ item.stdout }}
+      loop: "{{ files_audit.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
+
+    # --------------------------------------------------------------------------
+    # Remediación: propietario, grupo y permisos
+    # --------------------------------------------------------------------------
+    - name: Establecer propietario, grupo y permisos en archivos críticos
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "{{ item.mode }}"
+      loop: "{{ critical_files }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.path }}"
+      when: item.path is file
+      failed_when: false
+
+    # --------------------------------------------------------------------------
+    # Verificación final
+    # --------------------------------------------------------------------------
+    - name: Verificación final de permisos en archivos críticos
+      ansible.builtin.shell: |
+        if [ ! -e "{{ item.path }}" ]; then
+          echo "NOT_FOUND"
+        else
+          actual_mode=$(stat -Lc '%#a' "{{ item.path }}")
+          actual_owner=$(stat -Lc '%U' "{{ item.path }}")
+          actual_group=$(stat -Lc '%G' "{{ item.path }}")
+          result=""
+          mask={{ item.mode_mask }}
+          [ $(( 8#${actual_mode##0} & 8#${mask##0} )) -gt 0 ] && result="MODE_BAD:$actual_mode"
+          [ "$actual_owner" != "{{ item.owner }}" ] && result="$result OWNER_BAD:$actual_owner"
+          [ "$actual_group" != "{{ item.group }}" ] && result="$result GROUP_BAD:$actual_group"
+          echo "${result:-OK}"
+        fi
+      loop: "{{ critical_files }}"
+      loop_control:
+        label: "CIS {{ item.cis_control }} - {{ item.path }}"
+      register: files_final
+      changed_when: false
+      failed_when: false
+
+    - name: Resumen final auditoría CIS 6.1
+      ansible.builtin.debug:
+        msg: >-
+          [CIS {{ item.item.cis_control }}] {{ item.item.path }}
+          (mode={{ item.item.mode }} {{ item.item.owner }}:{{ item.item.group }}):
+          {{ 'PASS ✓' if item.stdout == 'OK'
+             else 'N/A - Archivo no encontrado' if item.stdout == 'NOT_FOUND'
+             else 'FAIL ✗ - ' + item.stdout }}
+      loop: "{{ files_final.results }}"
+      loop_control:
+        label: "CIS {{ item.item.cis_control }}"
