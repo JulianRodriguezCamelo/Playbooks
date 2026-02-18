@@ -14719,16 +14719,18 @@
 
     - name: "6.2.1.1.3 Ensure journald log file rotation is configured (Manual)"
       block:
-        - name: "Check journald configuration directory"
-          shell: [ -d /etc/systemd/journald.conf.d ] && echo "exists" || echo "not exists"
-          register: journald_conf_d_check
-          changed_when: false
-          failed_when: false
 
-        - name: "Display journald log rotation audit status"
-          debug:
-            msg: "MANUAL AUDIT REQUIRED: Review /etc/systemd/journald.conf for log rotation parameters (SystemMaxUse, SystemKeepFree, RuntimeMaxUse, RuntimeKeepFree, MaxFileSec)"
+    - name: "Check journald configuration directory"
+      stat:
+        path: /etc/systemd/journald.conf.d
+      register: journald_conf_d_check
 
+    - name: "Debug result"
+      debug:
+        msg: "Directory exists"
+      when: journald_conf_d_check.stat.exists
+
+        
     - name: "6.2.1.1.4 Ensure journald ForwardToSyslog is disabled (Automated)"
       block:
         - name: "Create journald configuration directory if not exists"
@@ -14912,3 +14914,1084 @@
         - name: "Display rsyslog installation status"
           debug:
             msg: "rsyslog has been installed as alternative logging service"
+
+    - name: "6.2.2.1 Ensure rsyslog is installed (Automated)"
+      block:
+        - name: "Check if rsyslog is installed"
+          shell: rpm -q rsyslog
+          register: rsyslog_installed
+          changed_when: false
+          failed_when: false
+
+        - name: "Install rsyslog package"
+          dnf:
+            name: rsyslog
+            state: present
+          register: rsyslog_install
+
+        - name: "Display rsyslog installation status"
+          debug:
+            msg: "rsyslog has been installed as alternative logging service"
+
+    # 6.2.2.2 - Ensure rsyslog service is enabled and active
+    - name: "6.2.2.2 Ensure rsyslog service is enabled and active (Automated)"
+      block:
+        - name: "Unmask rsyslog service"
+          systemd:
+            name: rsyslog.service
+            masked: no
+          register: rsyslog_unmask
+          failed_when: false
+
+        - name: "Enable and start rsyslog service"
+          systemd:
+            name: rsyslog.service
+            enabled: yes
+            state: started
+          register: rsyslog_enable
+
+        - name: "Verify rsyslog is enabled"
+          shell: systemctl is-enabled rsyslog
+          register: rsyslog_enabled_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Verify rsyslog is active"
+          shell: systemctl is-active rsyslog.service
+          register: rsyslog_active_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display rsyslog service status"
+          debug:
+            msg: "rsyslog service has been unmasked, enabled, and started"
+
+    # 6.2.2.3 - Ensure journald is configured to send logs to rsyslog
+    - name: "6.2.2.3 Ensure journald is configured to send logs to rsyslog (Automated)"
+      block:
+        - name: "Create journald configuration directory if not exists"
+          file:
+            path: /etc/systemd/journald.conf.d
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+          register: journald_conf_d_create
+
+        - name: "Configure ForwardToSyslog=yes in journald"
+          shell: |
+            {
+              [ ! -d /etc/systemd/journald.conf.d/ ] && mkdir /etc/systemd/journald.conf.d/
+              if grep -Psq -- '^\h*\[Journal\]' /etc/systemd/journald.conf.d/60-journald.conf 2>/dev/null; then
+                printf '%s\n' "ForwardToSyslog=yes" >> /etc/systemd/journald.conf.d/60-journald.conf
+              else
+                printf '%s\n' "[Journal]" "ForwardToSyslog=yes" >> /etc/systemd/journald.conf.d/60-journald.conf
+              fi
+            }
+          register: journald_forward_syslog_yes
+          changed_when: false
+          failed_when: false
+
+        - name: "Reload systemd-journald service"
+          shell: systemctl reload-or-restart systemd-journald.service
+          register: journald_reload_rsyslog
+          changed_when: false
+
+        - name: "Display ForwardToSyslog=yes configuration status"
+          debug:
+            msg: "journald has been configured to forward logs to rsyslog (ForwardToSyslog=yes)"
+
+    # 6.2.2.4 - Ensure rsyslog log file creation mode is configured
+    - name: "6.2.2.4 Ensure rsyslog log file creation mode is configured (Automated)"
+      block:
+        - name: "Check current FileCreateMode in rsyslog configuration"
+          shell: |
+            grep -Ps '^\h*\$FileCreateMode\h+0[0,2,4,6][0,2,4]0\b' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not configured"
+          register: rsyslog_filecreatemode_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Ensure rsyslog.d directory exists"
+          file:
+            path: /etc/rsyslog.d
+            state: directory
+            owner: root
+            group: root
+            mode: '0755'
+
+        - name: "Set $FileCreateMode to 0640 in rsyslog configuration"
+          lineinfile:
+            path: /etc/rsyslog.conf
+            line: "$FileCreateMode 0640"
+            regexp: '^\$FileCreateMode'
+            state: present
+          register: rsyslog_filecreatemode_config
+
+        - name: "Restart rsyslog service"
+          systemd:
+            name: rsyslog
+            state: restarted
+          register: rsyslog_restart_mode
+
+        - name: "Display rsyslog FileCreateMode configuration status"
+          debug:
+            msg: "rsyslog $FileCreateMode has been set to 0640 (owner read/write, group read, others none)"
+
+    # 6.2.2.5 - Ensure rsyslog logging is configured
+    - name: "6.2.2.5 Ensure rsyslog logging is configured (Manual)"
+      block:
+        - name: "Check current rsyslog logging configuration"
+          shell: |
+            ls -l /var/log/ 2>/dev/null || echo "no log files found"
+          register: rsyslog_logging_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Verify rsyslog.conf exists and has logging rules"
+          shell: |
+            if [ -f /etc/rsyslog.conf ]; then
+              grep -vE '^\s*(#|$)' /etc/rsyslog.conf | head -30
+            else
+              echo "rsyslog.conf not found"
+            fi
+          register: rsyslog_conf_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Apply baseline rsyslog logging configuration"
+          blockinfile:
+            path: /etc/rsyslog.conf
+            marker: "# {mark} CIS BASELINE LOGGING RULES"
+            block: |
+              *.emerg :omusrmsg:*
+              auth,authpriv.* /var/log/secure
+              mail.* -/var/log/mail
+              mail.info -/var/log/mail.info
+              mail.warning -/var/log/mail.warn
+              mail.err /var/log/mail.err
+              cron.* /var/log/cron
+              *.=warning;*.=err -/var/log/warn
+              *.crit /var/log/warn
+              *.*;mail.none;news.none -/var/log/messages
+              local0,local1.* -/var/log/localmessages
+              local2,local3.* -/var/log/localmessages
+              local4,local5.* -/var/log/localmessages
+              local6,local7.* -/var/log/localmessages
+            state: present
+          register: rsyslog_logging_config
+
+        - name: "Restart rsyslog to apply logging configuration"
+          systemd:
+            name: rsyslog
+            state: restarted
+          register: rsyslog_restart_logging
+
+        - name: "Display rsyslog logging configuration status"
+          debug:
+            msg: "REVIEW REQUIRED: rsyslog baseline logging rules applied. Review /etc/rsyslog.conf and /etc/rsyslog.d/*.conf to ensure rules match site policy"
+
+    # 6.2.2.6 - Ensure rsyslog is configured to send logs to a remote log host
+    - name: "6.2.2.6 Ensure rsyslog is configured to send logs to a remote log host (Manual)"
+      block:
+        - name: "Check if remote log host is configured (basic format)"
+          shell: |
+            grep "^*.*[^I][^I]*@@" /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not configured"
+          register: rsyslog_remote_basic_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Check if remote log host is configured (advanced format)"
+          shell: |
+            grep -Psi -- '^\s*([^#]+\s+)?action\(([^#]+\s+)?\btarget=\"?[^#"]+\"?\b' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not configured"
+          register: rsyslog_remote_advanced_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display remote log host configuration status"
+          debug:
+            msg: >
+              MANUAL CONFIGURATION REQUIRED: Configure a remote log host in /etc/rsyslog.conf or /etc/rsyslog.d/*.conf.
+              Example: *.* action(type="omfwd" target="loghost.example.com" port="514" protocol="tcp"
+              action.resumeRetryCount="100" queue.type="LinkedList" queue.size="1000")
+              Then run: systemctl reload-or-restart rsyslog.service
+
+    # 6.2.2.7 - Ensure rsyslog is not configured to receive logs from a remote client
+    - name: "6.2.2.7 Ensure rsyslog is not configured to receive logs from a remote client (Automated)"
+      block:
+        - name: "Check for imtcp module load (advanced format)"
+          shell: |
+            grep -Psi -- '^\h*module\(load=\"?imtcp\"?\)' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not found"
+          register: rsyslog_imtcp_module_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Check for imtcp input (advanced format)"
+          shell: |
+            grep -Psi -- '^\h*input\(type=\"?imtcp\"?\b' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not found"
+          register: rsyslog_imtcp_input_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Check for legacy $ModLoad imtcp"
+          shell: |
+            grep -Psi -- '^\h*\$ModLoad\h+imtcp\b' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not found"
+          register: rsyslog_legacy_modload_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Check for legacy $InputTCPServerRun"
+          shell: |
+            grep -Psi -- '^\h*\$InputTCPServerRun\b' /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || echo "not found"
+          register: rsyslog_legacy_inputtcp_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Remove imtcp module load entries (advanced format)"
+          shell: |
+            for f in /etc/rsyslog.conf /etc/rsyslog.d/*.conf; do
+              [ -f "$f" ] && sed -i '/^\h*module(load="imtcp")/d' "$f"
+            done
+          register: rsyslog_remove_imtcp_module
+          changed_when: false
+          failed_when: false
+
+        - name: "Remove imtcp input entries (advanced format)"
+          shell: |
+            for f in /etc/rsyslog.conf /etc/rsyslog.d/*.conf; do
+              [ -f "$f" ] && sed -i '/^\h*input(type="imtcp"/d' "$f"
+            done
+          register: rsyslog_remove_imtcp_input
+          changed_when: false
+          failed_when: false
+
+        - name: "Remove legacy $ModLoad imtcp entries"
+          shell: |
+            for f in /etc/rsyslog.conf /etc/rsyslog.d/*.conf; do
+              [ -f "$f" ] && sed -i '/^\h*\$ModLoad\h\+imtcp/d' "$f"
+            done
+          register: rsyslog_remove_legacy_modload
+          changed_when: false
+          failed_when: false
+
+        - name: "Remove legacy $InputTCPServerRun entries"
+          shell: |
+            for f in /etc/rsyslog.conf /etc/rsyslog.d/*.conf; do
+              [ -f "$f" ] && sed -i '/^\h*\$InputTCPServerRun/d' "$f"
+            done
+          register: rsyslog_remove_legacy_inputtcp
+          changed_when: false
+          failed_when: false
+
+        - name: "Restart rsyslog after removing remote client configuration"
+          systemd:
+            name: rsyslog
+            state: restarted
+          register: rsyslog_restart_remote
+
+        - name: "Display rsyslog remote client configuration status"
+          debug:
+            msg: "rsyslog has been configured to NOT receive logs from remote clients (imtcp entries removed)"
+
+    # 6.2.2.8 - Ensure logrotate is configured
+    - name: "6.2.2.8 Ensure logrotate is configured (Manual)"
+      block:
+        - name: "Check logrotate main configuration"
+          shell: |
+            if [ -f /etc/logrotate.conf ]; then
+              grep -vE '^\s*(#|$)' /etc/logrotate.conf | head -20
+            else
+              echo "logrotate.conf not found"
+            fi
+          register: logrotate_conf_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Check logrotate.d configuration files"
+          shell: |
+            ls -la /etc/logrotate.d/ 2>/dev/null || echo "logrotate.d not found"
+          register: logrotate_d_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Ensure logrotate is installed"
+          dnf:
+            name: logrotate
+            state: present
+          register: logrotate_install
+
+        - name: "Verify logrotate maxage is configured"
+          shell: |
+            grep -Psi -- '^\h*maxage\b' /etc/logrotate.conf /etc/logrotate.d/* 2>/dev/null || echo "maxage not configured"
+          register: logrotate_maxage_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display logrotate configuration status"
+          debug:
+            msg: >
+              REVIEW REQUIRED: Verify /etc/logrotate.conf and /etc/logrotate.d/* are configured per site policy.
+              Recommendation: Set 'maxage' to a value greater than the longest any log file should exist on the system
+              to ensure rotated log files are cleaned up properly.
+
+    # 6.2.3.1 - Ensure access to all logfiles has been configured
+    - name: "6.2.3.1 Ensure access to all logfiles has been configured (Automated)"
+      block:
+        - name: "Audit logfile permissions and ownership"
+          shell: |
+            #!/usr/bin/env bash
+            a_output=(); a_output2=()
+            f_file_test_chk()
+            {
+              a_out2=()
+              maxperm="$( printf '%o' $(( 0777 & ~$perm_mask)) )"
+              [ $(( $l_mode & $perm_mask )) -gt 0 ] && \
+                a_out2+=(" o Mode: \"$l_mode\" should be \"$maxperm\" or more restrictive")
+              [[ ! "$l_user" =~ $l_auser ]] && \
+                a_out2+=(" o Owned by: \"$l_user\" and should be owned by \"${l_auser//|/ or }\"")
+              [[ ! "$l_group" =~ $l_agroup ]] && \
+                a_out2+=(" o Group owned by: \"$l_group\" and should be group owned by \"${l_agroup//|/ or }\"")
+              [ "${#a_out2[@]}" -gt 0 ] && a_output2+=(" - File: \"$l_fname\" is:" "${a_out2[@]}")
+            }
+            while IFS= read -r -d $'\0' l_file; do
+              while IFS=: read -r l_fname l_mode l_user l_group; do
+                if grep -Pq -- '\/(apt)\h*$' <<< "$(dirname "$l_fname")"; then
+                  perm_mask='0133' l_auser="root" l_agroup="(root|adm)"; f_file_test_chk
+                else
+                  case "$(basename "$l_fname")" in
+                    lastlog | lastlog.* | wtmp | wtmp.* | wtmp-* | btmp | btmp.* | btmp-* | README)
+                      perm_mask='0113' l_auser="root" l_agroup="(root|utmp)"; f_file_test_chk ;;
+                    cloud-init.log* | localmessages* | waagent.log*)
+                      perm_mask='0133' l_auser="(root|syslog)" l_agroup="(root|adm)"; f_file_test_chk ;;
+                    secure{,*.*,.*,-*} | auth.log | syslog | messages)
+                      perm_mask='0137' l_auser="(root|syslog)" l_agroup="(root|adm)"; f_file_test_chk ;;
+                    SSSD | sssd)
+                      perm_mask='0117' l_auser="(root|SSSD)" l_agroup="(root|SSSD)"; f_file_test_chk ;;
+                    gdm | gdm3)
+                      perm_mask='0117' l_auser="root" l_agroup="(root|gdm|gdm3)"; f_file_test_chk ;;
+                    *.journal | *.journal~)
+                      perm_mask='0137' l_auser="root" l_agroup="(root|systemd-journal)"; f_file_test_chk ;;
+                    *)
+                      perm_mask='0137' l_auser="(root|syslog)" l_agroup="(root|adm)"
+                      if [ "$l_user" = "root" ] || ! grep -Pq -- "^\h*$(awk -F: '$1=="'"$l_user"'" {print $7}' /etc/passwd)\b" /etc/shells; then
+                        ! grep -Pq -- "$l_auser" <<< "$l_user" && l_auser="(root|syslog|$l_user)"
+                        ! grep -Pq -- "$l_agroup" <<< "$l_group" && l_agroup="(root|adm|$l_group)"
+                      fi
+                      f_file_test_chk ;;
+                  esac
+                fi
+              done < <(stat -Lc '%n:%#a:%U:%G' "$l_file")
+            done < <(find -L /var/log -type f \( -perm /0137 -o ! -user root -o ! -group root \) -print0)
+            if [ "${#a_output2[@]}" -le 0 ]; then
+              printf '\n%s' "- Audit Result:" " ** PASS **" " - All files in \"/var/log/\" have appropriate permissions and ownership" ""
+            else
+              printf '\n%s' "- Audit Result:" " ** FAIL **" " - Reason(s) for audit failure:" "${a_output2[@]}" ""
+            fi
+          register: logfile_permissions_audit
+          changed_when: false
+          failed_when: false
+
+        - name: "Remediate logfile permissions and ownership"
+          shell: |
+            #!/usr/bin/env bash
+            a_output2=()
+            f_file_test_fix()
+            {
+              a_out2=()
+              maxperm="$( printf '%o' $(( 0777 & ~$perm_mask)) )"
+              if [ $(( $l_mode & $perm_mask )) -gt 0 ]; then
+                a_out2+=(" o Mode: \"$l_mode\" should be \"$maxperm\" or more restrictive")
+                chmod "$l_rperms" "$l_fname"
+              fi
+              if [[ ! "$l_user" =~ $l_auser ]]; then
+                a_out2+=(" o Owned by: \"$l_user\" - changing to \"$l_fix_account\"")
+                chown "$l_fix_account" "$l_fname"
+              fi
+              if [[ ! "$l_group" =~ $l_agroup ]]; then
+                a_out2+=(" o Group owned by: \"$l_group\" - changing to \"$l_fix_account\"")
+                chgrp "$l_fix_account" "$l_fname"
+              fi
+              [ "${#a_out2[@]}" -gt 0 ] && a_output2+=(" - File: \"$l_fname\" is:" "${a_out2[@]}")
+            }
+            l_fix_account='root'
+            while IFS= read -r -d $'\0' l_file; do
+              while IFS=: read -r l_fname l_mode l_user l_group; do
+                if grep -Pq -- '\/(apt)\h*$' <<< "$(dirname "$l_fname")"; then
+                  perm_mask='0133' l_rperms="u-x,go-wx" l_auser="root" l_agroup="(root|adm)"; f_file_test_fix
+                else
+                  case "$(basename "$l_fname")" in
+                    lastlog | lastlog.* | wtmp | wtmp.* | wtmp-* | btmp | btmp.* | btmp-* | README)
+                      perm_mask='0113' l_rperms="ug-x,o-wx" l_auser="root" l_agroup="(root|utmp)"; f_file_test_fix ;;
+                    cloud-init.log* | localmessages* | waagent.log*)
+                      perm_mask='0133' l_rperms="u-x,go-wx" l_auser="(root|syslog)" l_agroup="(root|adm)"; f_file_test_fix ;;
+                    secure | auth.log | syslog | messages)
+                      perm_mask='0137' l_rperms="u-x,g-wx,o-rwx" l_auser="(root|syslog)" l_agroup="(root|adm)"; f_file_test_fix ;;
+                    SSSD | sssd)
+                      perm_mask='0117' l_rperms="ug-x,o-rwx" l_auser="(root|SSSD)" l_agroup="(root|SSSD)"; f_file_test_fix ;;
+                    gdm | gdm3)
+                      perm_mask='0117' l_rperms="ug-x,o-rwx" l_auser="root" l_agroup="(root|gdm|gdm3)"; f_file_test_fix ;;
+                    *.journal | *.journal~)
+                      perm_mask='0137' l_rperms="u-x,g-wx,o-rwx" l_auser="root" l_agroup="(root|systemd-journal)"; f_file_test_fix ;;
+                    *)
+                      perm_mask='0137' l_rperms="u-x,g-wx,o-rwx" l_auser="(root|syslog)" l_agroup="(root|adm)"
+                      if [ "$l_user" = "root" ] || ! grep -Pq -- "^\h*$(awk -F: '$1=="'"$l_user"'" {print $7}' /etc/passwd)\b" /etc/shells; then
+                        ! grep -Pq -- "$l_auser" <<< "$l_user" && l_auser="(root|syslog|$l_user)"
+                        ! grep -Pq -- "$l_agroup" <<< "$l_group" && l_agroup="(root|adm|$l_group)"
+                      fi
+                      f_file_test_fix ;;
+                  esac
+                fi
+              done < <(stat -Lc '%n:%#a:%U:%G' "$l_file")
+            done < <(find -L /var/log -type f \( -perm /0137 -o ! -user root -o ! -group root \) -print0)
+            if [ "${#a_output2[@]}" -le 0 ]; then
+              printf '\n%s' "- All files in \"/var/log/\" have appropriate permissions and ownership" " o No changes required" ""
+            else
+              printf '\n%s' "${a_output2[@]}" ""
+            fi
+          register: logfile_permissions_fix
+          changed_when: false
+          failed_when: false
+
+        - name: "Display logfile access configuration status"
+          debug:
+            msg: "Log file permissions and ownership in /var/log/ have been audited and remediated per CIS benchmark"
+
+    - name: "7.1.1 Ensure access to /etc/passwd is configured (Automated)"
+      block:
+        - name: "Remove excess permissions and set owner on /etc/passwd"
+          file:
+            path: /etc/passwd
+            owner: root
+            group: root
+            mode: '0644'
+          register: passwd_perms
+
+        - name: "Display /etc/passwd permission status"
+          debug:
+            msg: "/etc/passwd permissions set to 0644, owned by root:root"
+
+    - name: "7.1.2 Ensure access to /etc/passwd- is configured (Automated)"
+      block:
+        - name: "Remove excess permissions and set owner on /etc/passwd-"
+          file:
+            path: /etc/passwd-
+            owner: root
+            group: root
+            mode: '0644'
+          register: passwd_backup_perms
+          failed_when: false
+
+        - name: "Display /etc/passwd- permission status"
+          debug:
+            msg: "/etc/passwd- permissions set to 0644, owned by root:root"
+
+    - name: "7.1.3 Ensure access to /etc/group is configured (Automated)"
+      block:
+        - name: "Remove excess permissions and set owner on /etc/group"
+          file:
+            path: /etc/group
+            owner: root
+            group: root
+            mode: '0644'
+          register: group_perms
+
+        - name: "Display /etc/group permission status"
+          debug:
+            msg: "/etc/group permissions set to 0644, owned by root:root"
+
+    - name: "7.1.4 Ensure access to /etc/group- is configured (Automated)"
+      block:
+        - name: "Remove excess permissions and set owner on /etc/group-"
+          file:
+            path: /etc/group-
+            owner: root
+            group: root
+            mode: '0644'
+          register: group_backup_perms
+          failed_when: false
+
+        - name: "Display /etc/group- permission status"
+          debug:
+            msg: "/etc/group- permissions set to 0644, owned by root:root"
+
+    - name: "7.1.5 Ensure access to /etc/shadow is configured (Automated)"
+      block:
+        - name: "Set strict permissions on /etc/shadow"
+          file:
+            path: /etc/shadow
+            owner: root
+            group: root
+            mode: '0000'
+          register: shadow_perms
+
+        - name: "Display /etc/shadow permission status"
+          debug:
+            msg: "/etc/shadow permissions set to 0000, owned by root:root"
+
+    - name: "7.1.6 Ensure access to /etc/shadow- is configured (Automated)"
+      block:
+        - name: "Set strict permissions on /etc/shadow-"
+          file:
+            path: /etc/shadow-
+            owner: root
+            group: root
+            mode: '0000'
+          register: shadow_backup_perms
+          failed_when: false
+
+        - name: "Display /etc/shadow- permission status"
+          debug:
+            msg: "/etc/shadow- permissions set to 0000, owned by root:root"
+
+    - name: "7.1.7 Ensure access to /etc/gshadow is configured (Automated)"
+      block:
+        - name: "Set strict permissions on /etc/gshadow"
+          file:
+            path: /etc/gshadow
+            owner: root
+            group: root
+            mode: '0000'
+          register: gshadow_perms
+
+        - name: "Display /etc/gshadow permission status"
+          debug:
+            msg: "/etc/gshadow permissions set to 0000, owned by root:root"
+
+    - name: "7.1.8 Ensure access to /etc/gshadow- is configured (Automated)"
+      block:
+        - name: "Set strict permissions on /etc/gshadow-"
+          file:
+            path: /etc/gshadow-
+            owner: root
+            group: root
+            mode: '0000'
+          register: gshadow_backup_perms
+          failed_when: false
+
+        - name: "Display /etc/gshadow- permission status"
+          debug:
+            msg: "/etc/gshadow- permissions set to 0000, owned by root:root"
+
+    - name: "7.1.9 Ensure access to /etc/shells is configured (Automated)"
+      block:
+        - name: "Remove excess permissions and set owner on /etc/shells"
+          file:
+            path: /etc/shells
+            owner: root
+            group: root
+            mode: '0644'
+          register: shells_perms
+
+        - name: "Display /etc/shells permission status"
+          debug:
+            msg: "/etc/shells permissions set to 0644, owned by root:root"
+
+    - name: "7.1.10 Ensure access to /etc/security/opasswd is configured (Automated)"
+      block:
+        - name: "Set permissions on /etc/security/opasswd if it exists"
+          shell: |
+            [ -e "/etc/security/opasswd" ] && chmod u-x,go-rwx /etc/security/opasswd || true
+            [ -e "/etc/security/opasswd" ] && chown root:root /etc/security/opasswd || true
+          register: opasswd_perms
+          changed_when: false
+          failed_when: false
+
+        - name: "Set permissions on /etc/security/opasswd.old if it exists"
+          shell: |
+            [ -e "/etc/security/opasswd.old" ] && chmod u-x,go-rwx /etc/security/opasswd.old || true
+            [ -e "/etc/security/opasswd.old" ] && chown root:root /etc/security/opasswd.old || true
+          register: opasswd_old_perms
+          changed_when: false
+          failed_when: false
+
+        - name: "Display /etc/security/opasswd permission status"
+          debug:
+            msg: "/etc/security/opasswd and /etc/security/opasswd.old (if present) set to 0600, owned by root:root"
+
+    - name: "7.1.11 Ensure world writable files and directories are secured (Automated)"
+      block:
+        - name: "Audit world writable files and directories"
+          shell: |
+            #!/usr/bin/env bash
+            a_output=() a_output2=() a_file=() a_dir=()
+            l_smask='01000' l_limit="50"
+            a_path=(-path "*/containers/storage/*" -o -path "*/containerd/*" -o -path \
+            "*/kubelet/*" -o -path "/sys/*" -o -path "/snap/*" -o -path "/boot/efi/*")
+            while IFS= read -r l_mount; do
+              while IFS= read -r -d $'\0' l_file; do
+                if [ -e "$l_file" ]; then
+                  [ -f "$l_file" ] && a_file+=("$l_file")
+                  if [ -d "$l_file" ]; then
+                    l_mode="$(stat -Lc '%#a' "$l_file")"
+                    [ ! $(( $l_mode & $l_smask )) -gt 0 ] && a_dir+=("$l_file")
+                  fi
+                fi
+              done < <(find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o \
+              \( -type f -o -type d \) -perm -0002 -print0 2> /dev/null)
+            done < <(findmnt -Dkerno fstype,target | awk '($1 !~ \
+            /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && $2 !~ \
+            /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}')
+            if [ "${#a_file[@]}" -le 0 ]; then
+              a_output+=(" - No world writable files exist on the local filesystem.")
+            else
+              a_output2+=("" " - There are \"${#a_file[@]}\" World writable files on the system." \
+              " - The following is a list of World writable files:" \
+              "${a_file[@]:0:$l_limit}" " - end of list")
+            fi
+            if [ "${#a_dir[@]}" -le 0 ]; then
+              a_output+=(" - Sticky bit is set on world writable directories on the local filesystem.")
+            else
+              a_output2+=("" " - There are \"${#a_dir[@]}\" World writable directories without the sticky bit on the system." \
+              " - The following is a list of World writable directories without the sticky bit:" \
+              "${a_dir[@]:0:$l_limit}" " - end of list")
+            fi
+            if [ "${#a_output2[@]}" -le 0 ]; then
+              printf '%s\n' "" "- Audit Result:" " ** PASS **" "${a_output[@]}"
+            else
+              printf '%s\n' "" "- Audit Result:" " ** FAIL **" " * Reasons for audit failure *" "${a_output2[@]}" ""
+              [ "${#a_output[@]}" -gt 0 ] && printf '%s\n' "- Correctly set:" "${a_output[@]}"
+            fi
+          register: world_writable_audit
+          changed_when: false
+          failed_when: false
+
+        - name: "Remediate world writable files and directories"
+          shell: |
+            #!/usr/bin/env bash
+            l_smask='01000' a_file=() a_dir=()
+            a_path=(-path "*/containers/storage/*" -o -path "*/containerd/*" -o -path \
+            "*/kubelet/*" -o -path "/sys/*" -o -path "/snap/*" -o -path "/boot/efi/*")
+            while IFS= read -r l_mount; do
+              while IFS= read -r -d $'\0' l_file; do
+                if [ -e "$l_file" ]; then
+                  l_mode="$(stat -Lc '%#a' "$l_file")"
+                  if [ -f "$l_file" ]; then
+                    echo " - File: \"$l_file\" is mode: \"$l_mode\" - removing write permission from other"
+                    chmod o-w "$l_file"
+                  fi
+                  if [ -d "$l_file" ]; then
+                    if [ ! $(( $l_mode & $l_smask )) -gt 0 ]; then
+                      echo " - Directory: \"$l_file\" is mode: \"$l_mode\" - adding sticky bit"
+                      chmod a+t "$l_file"
+                    fi
+                  fi
+                fi
+              done < <(find "$l_mount" -mount -xdev \( "${a_path[@]}" \) \( -type f \
+              -o -type d \) -perm -0002 -print0 2> /dev/null)
+            done < <(findmnt -Dkerno fstype,target | awk '($1 !~ \
+            /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && $2 !~ \
+            /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}')
+          register: world_writable_fix
+          changed_when: false
+          failed_when: false
+
+        - name: "Display world writable remediation status"
+          debug:
+            msg: "World writable files have had 'other' write removed; world writable directories without sticky bit have been corrected"
+
+    - name: "7.1.12 Ensure no files or directories without an owner and a group exist (Automated)"
+      block:
+        - name: "Audit unowned and ungrouped files"
+          shell: |
+            #!/usr/bin/env bash
+            a_output=() a_output2=() a_nouser=() a_nogroup=()
+            a_path=(-path "*/containers/storage/*" -o -path "*/containerd/*" -o -path \
+            "*/kubelet/*" -o -path "/sys/*" -o -path "/snap/*" -o -path "/boot/efi/*")
+            while IFS= read -r l_mount; do
+              while IFS= read -r -d $'\0' l_file; do
+                if [ -e "$l_file" ]; then
+                  while IFS=: read -r l_user l_group; do
+                    [ "$l_user" = "UNKNOWN" ] && a_nouser+=("$l_file")
+                    [ "$l_group" = "UNKNOWN" ] && a_nogroup+=("$l_file")
+                  done < <(stat -Lc '%U:%G' "$l_file")
+                fi
+              done < <(find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o \
+              \( -type f -o -type d \) \( -nouser -o -nogroup \) -print0 2> /dev/null)
+            done < <(findmnt -Dkerno fstype,target | awk '($1 !~ \
+            /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && $2 !~ \
+            /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}')
+            if ! (( ${#a_nouser[@]} > 0 )); then
+              a_output+=(" - No files or directories without an owner exist on the local filesystem.")
+            else
+              a_output2+=(" - There are \"$(printf '%s' "${#a_nouser[@]}")\" unowned files or directories on the system." \
+              " - The following is a list of unowned files and/or directories:" \
+              "$(printf '%s\n' "${a_nouser[@]}")" " - end of list")
+            fi
+            if ! (( ${#a_nogroup[@]} > 0 )); then
+              a_output+=(" - No files or directories without a group owner exist on the local filesystem.")
+            else
+              a_output2+=(" - There are \"$(printf '%s' "${#a_nogroup[@]}")\" ungrouped files or directories on the system." \
+              " - The following is a list of ungrouped files and/or directories:" \
+              "$(printf '%s\n' "${a_nogroup[@]}")" " - end of list")
+            fi
+            if [ "${#a_output2[@]}" -le 0 ]; then
+              printf '%s\n' "" "- Audit Result:" " ** PASS **" "${a_output[@]}"
+            else
+              printf '%s\n' "" "- Audit Result:" " ** FAIL **" " * Reasons for audit failure *" "${a_output2[@]}" ""
+              [ "${#a_output[@]}" -gt 0 ] && printf '%s\n' "- Correctly set:" "${a_output[@]}"
+            fi
+          register: unowned_files_audit
+          changed_when: false
+          failed_when: false
+
+        - name: "Display unowned files audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: Review output and remove or reassign ownership of any unowned/ungrouped files to an active user"
+
+    - name: "7.1.13 Ensure SUID and SGID files are reviewed (Manual)"
+      block:
+        - name: "Generate list of SUID and SGID files for review"
+          shell: |
+            #!/usr/bin/env bash
+            l_output="" l_output2=""
+            a_suid=(); a_sgid=()
+            while IFS= read -r l_mount; do
+              while IFS= read -r -d $'\0' l_file; do
+                if [ -e "$l_file" ]; then
+                  l_mode="$(stat -Lc '%#a' "$l_file")"
+                  [ $(( $l_mode & 04000 )) -gt 0 ] && a_suid+=("$l_file")
+                  [ $(( $l_mode & 02000 )) -gt 0 ] && a_sgid+=("$l_file")
+                fi
+              done < <(find "$l_mount" -xdev -type f \( -perm -2000 -o -perm -4000 \) -print0 2>/dev/null)
+            done < <(findmnt -Dkerno fstype,target,options | awk '($1 !~ \
+            /^\s*(nfs|proc|smb|vfat|iso9660|efivarfs|selinuxfs)/ && $2 !~ \
+            /^\/run\/user\// && $3 !~/noexec/ && $3 !~/nosuid/) {print $2}')
+            if ! (( ${#a_suid[@]} > 0 )); then
+              l_output="$l_output\n - No executable SUID files exist on the system"
+            else
+              l_output2="$l_output2\n - List of \"$(printf '%s' "${#a_suid[@]}")\" SUID executable files:\n$(printf '%s\n' "${a_suid[@]}")\n - end of list -\n"
+            fi
+            if ! (( ${#a_sgid[@]} > 0 )); then
+              l_output="$l_output\n - No SGID files exist on the system"
+            else
+              l_output2="$l_output2\n - List of \"$(printf '%s' "${#a_sgid[@]}")\" SGID executable files:\n$(printf '%s\n' "${a_sgid[@]}")\n - end of list -\n"
+            fi
+            [ -n "$l_output2" ] && l_output2="$l_output2\n- Review the preceding list(s) of SUID and/or SGID files to ensure no rogue programs have been introduced.\n"
+            if [ -z "$l_output2" ]; then
+              echo -e "\n- Audit Result:\n$l_output\n"
+            else
+              echo -e "\n- Audit Result:\n$l_output2\n"
+              [ -n "$l_output" ] && echo -e "$l_output\n"
+            fi
+          register: suid_sgid_audit
+          changed_when: false
+          failed_when: false
+
+        - name: "Display SUID/SGID audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: Inspect the SUID/SGID file list generated above and confirm integrity of these binaries against known-good checksums"
+
+    # Local User and Group Settings Section (7.2)
+    - name: "7.2.1 Ensure accounts in /etc/passwd use shadowed passwords (Automated)"
+      block:
+        - name: "Check for non-shadowed accounts in /etc/passwd"
+          shell: |
+            awk -F: '($2 != "x" ) { print "User: \"" $1 "\" is not set to shadowed passwords "}' /etc/passwd
+          register: non_shadowed_accounts
+          changed_when: false
+          failed_when: false
+
+        - name: "Run pwconv to migrate passwords to /etc/shadow"
+          shell: pwconv
+          register: pwconv_result
+          changed_when: false
+          failed_when: false
+
+        - name: "Display shadowed passwords status"
+          debug:
+            msg: "pwconv executed to ensure all accounts use shadowed passwords in /etc/shadow"
+
+    - name: "7.2.2 Ensure /etc/shadow password fields are not empty (Automated)"
+      block:
+        - name: "Find accounts with empty password fields in /etc/shadow"
+          shell: |
+            awk -F: '($2 == "" ) { print $1 }' /etc/shadow
+          register: empty_password_accounts
+          changed_when: false
+          failed_when: false
+
+        - name: "Lock accounts with empty passwords"
+          shell: |
+            while IFS= read -r l_user; do
+              [ -n "$l_user" ] && passwd -l "$l_user" && echo "Locked: $l_user"
+            done < <(awk -F: '($2 == "" ) { print $1 }' /etc/shadow)
+          register: lock_empty_password_accounts
+          changed_when: false
+          failed_when: false
+
+        - name: "Display empty password remediation status"
+          debug:
+            msg: "Accounts with empty password fields in /etc/shadow have been locked. INVESTIGATE each locked account to determine appropriate action."
+
+    - name: "7.2.3 Ensure all groups in /etc/passwd exist in /etc/group (Automated)"
+      block:
+        - name: "Check for GIDs in /etc/passwd that don't exist in /etc/group"
+          shell: |
+            #!/usr/bin/env bash
+            a_passwd_group_gid=("$(awk -F: '{print $4}' /etc/passwd | sort -u)")
+            a_group_gid=("$(awk -F: '{print $3}' /etc/group | sort -u)")
+            a_passwd_group_diff=("$(printf '%s\n' "${a_group_gid[@]}" "${a_passwd_group_gid[@]}" | sort | uniq -u)")
+            while IFS= read -r l_gid; do
+              awk -F: '($4 == '"$l_gid"') {print " - User: \"" $1 "\" has GID: \"" $4 "\" which does not exist in /etc/group" }' /etc/passwd
+            done < <(printf '%s\n' "${a_passwd_group_gid[@]}" "${a_passwd_group_diff[@]}" | sort | uniq -D | uniq)
+          register: missing_groups_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display missing groups audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: Review output above and create missing groups or reassign users to valid existing groups as appropriate"
+
+    - name: "7.2.4 Ensure no duplicate UIDs exist (Automated)"
+      block:
+        - name: "Check for duplicate UIDs in /etc/passwd"
+          shell: |
+            #!/usr/bin/env bash
+            while read -r l_count l_uid; do
+              if [ "$l_count" -gt 1 ]; then
+                echo "Duplicate UID: \"$l_uid\" Users: \"$(awk -F: '($3 == n) { print $1 }' n=$l_uid /etc/passwd | xargs)\""
+              fi
+            done < <(cut -f3 -d":" /etc/passwd | sort -n | uniq -c)
+          register: duplicate_uids_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display duplicate UID audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: If duplicate UIDs found above, establish unique UIDs and review all files owned by the shared UIDs"
+
+    - name: "7.2.5 Ensure no duplicate GIDs exist (Automated)"
+      block:
+        - name: "Check for duplicate GIDs in /etc/group"
+          shell: |
+            #!/usr/bin/env bash
+            while read -r l_count l_gid; do
+              if [ "$l_count" -gt 1 ]; then
+                echo "Duplicate GID: \"$l_gid\" Groups: \"$(awk -F: '($3 == n) { print $1 }' n=$l_gid /etc/group | xargs)\""
+              fi
+            done < <(cut -f3 -d":" /etc/group | sort -n | uniq -c)
+          register: duplicate_gids_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display duplicate GID audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: If duplicate GIDs found above, establish unique GIDs and review all files owned by the shared GIDs"
+
+    - name: "7.2.6 Ensure no duplicate user names exist (Automated)"
+      block:
+        - name: "Check for duplicate user names in /etc/passwd"
+          shell: |
+            #!/usr/bin/env bash
+            while read -r l_count l_user; do
+              if [ "$l_count" -gt 1 ]; then
+                echo "Duplicate User: \"$l_user\" Users: \"$(awk -F: '($1 == n) { print $1 }' n=$l_user /etc/passwd | xargs)\""
+              fi
+            done < <(cut -f1 -d":" /etc/passwd | sort -n | uniq -c)
+          register: duplicate_usernames_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display duplicate username audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: If duplicate usernames found above, establish unique user names. File ownerships will automatically reflect the change as long as UIDs are unique."
+
+    - name: "7.2.7 Ensure no duplicate group names exist (Automated)"
+      block:
+        - name: "Check for duplicate group names in /etc/group"
+          shell: |
+            #!/usr/bin/env bash
+            while read -r l_count l_group; do
+              if [ "$l_count" -gt 1 ]; then
+                echo "Duplicate Group: \"$l_group\" Groups: \"$(awk -F: '($1 == n) { print $1 }' n=$l_group /etc/group | xargs)\""
+              fi
+            done < <(cut -f1 -d":" /etc/group | sort -n | uniq -c)
+          register: duplicate_groupnames_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display duplicate group name audit result"
+          debug:
+            msg: "MANUAL REVIEW REQUIRED: If duplicate group names found above, establish unique group names. File group ownerships will reflect the change as long as GIDs are unique."
+
+    - name: "7.2.8 Ensure local interactive user home directories are configured (Automated)"
+      block:
+        - name: "Audit local interactive user home directories"
+          shell: |
+            #!/usr/bin/env bash
+            a_output=() a_output2=() a_exists2=() a_mode2=() a_owner2=()
+            l_valid_shells="^($( awk -F\/ '$NF != "nologin" {print}' /etc/shells | sed \
+            -rn '/^\//{s,/,\\\\/,g;p}' | paste -s -d '|' - ))$"
+            l_mask='0027'; l_max="$( printf '%o' $(( 0777 & ~$l_mask)) )"
+            while IFS=" " read -r l_user l_home; do
+              if [ -d "$l_home" ]; then
+                while IFS=: read -r l_own l_mode; do
+                  [ "$l_user" != "$l_own" ] && a_owner2+=(" - User: \"$l_user\" Home \"$l_home\" is owned by: \"$l_own\"")
+                  [ $(( $l_mode & $l_mask )) -gt 0 ] && a_mode2+=(" - User: \"$l_user\" Home \"$l_home\" is mode: \"$l_mode\" should be mode: \"$l_max\" or more restrictive")
+                done <<< "$(stat -Lc '%U:%#a' "$l_home")"
+              else
+                a_exists2+=(" - User: \"$l_user\" Home Directory: \"$l_home\" Doesn't exist")
+              fi
+            done <<< "$(awk -v pat="$l_valid_shells" -F: '$(NF) ~ pat { print $1 " " $(NF-1) }' /etc/passwd)"
+            [ "${#a_exists2[@]}" -gt 0 ] && a_output2+=("${a_exists2[@]}") || a_output+=(" - All interactive users home directories exist")
+            [ "${#a_mode2[@]}" -gt 0 ] && a_output2+=("${a_mode2[@]}") || a_output+=(" - All interactive users home directories are mode \"$l_max\" or more restrictive")
+            [ "${#a_owner2[@]}" -gt 0 ] && a_output2+=("${a_owner2[@]}") || a_output+=(" - All interactive users own their home directory")
+            if [ "${#a_output2[@]}" -le 0 ]; then
+              printf '%s\n' "" "- Audit Result:" " ** PASS **" "${a_output[@]}"
+            else
+              printf '%s\n' "" "- Audit Result:" " ** FAIL **" " - Reason(s) for audit failure:" "${a_output2[@]}"
+              [ "${#a_output[@]}" -gt 0 ] && printf '%s\n' "- Correctly set:" "${a_output[@]}"
+            fi
+          register: home_dirs_audit
+          changed_when: false
+          failed_when: false
+
+        - name: "Remediate local interactive user home directory permissions and ownership"
+          shell: |
+            #!/usr/bin/env bash
+            a_output2=() a_exists2=() a_mode2=() a_owner2=()
+            l_valid_shells="^($( awk -F\/ '$NF != "nologin" {print}' /etc/shells | sed \
+            -rn '/^\//{s,/,\\\\/,g;p}' | paste -s -d '|' - ))$"
+            l_mask='0027'; l_max="$( printf '%o' $(( 0777 & ~$l_mask)) )"
+            while IFS=" " read -r l_user l_home; do
+              if [ -d "$l_home" ]; then
+                while IFS=: read -r l_own l_mode; do
+                  if [ "$l_user" != "$l_own" ]; then
+                    a_owner2+=(" - User: \"$l_user\" Home \"$l_home\" owned by: \"$l_own\" - changing to: \"$l_user\"")
+                    chown "$l_user" "$l_home"
+                  fi
+                  if [ $(( $l_mode & $l_mask )) -gt 0 ]; then
+                    a_mode2+=(" - User: \"$l_user\" Home \"$l_home\" is mode: \"$l_mode\" - changing to mode: \"$l_max\" or more restrictive")
+                    chmod g-w,o-rwx "$l_home"
+                  fi
+                done <<< "$(stat -Lc '%U:%#a' "$l_home")"
+              else
+                a_exists2+=(" - User: \"$l_user\" Home Directory: \"$l_home\" Doesn't exist - MANUAL ACTION REQUIRED")
+              fi
+            done <<< "$(awk -v pat="$l_valid_shells" -F: '$(NF) ~ pat { print $1 " " $(NF-1) }' /etc/passwd)"
+            [ "${#a_exists2[@]}" -gt 0 ] && a_output2+=("${a_exists2[@]}")
+            [ "${#a_mode2[@]}" -gt 0 ] && a_output2+=("${a_mode2[@]}")
+            [ "${#a_owner2[@]}" -gt 0 ] && a_output2+=("${a_owner2[@]}")
+            if [ "${#a_output2[@]}" -gt 0 ]; then
+              printf '%s\n' "" "${a_output2[@]}"
+            else
+              printf '%s\n' "" "- No changes required"
+            fi
+          register: home_dirs_fix
+          changed_when: false
+          failed_when: false
+
+        - name: "Display home directory configuration status"
+          debug:
+            msg: "Interactive user home directories have been audited and remediated. Home directories without 'exist' require MANUAL intervention (lock, remove user, or create directory)."
+
+    - name: "7.2.9 Ensure local interactive user dot files access is configured (Automated)"
+      block:
+        - name: "Audit local interactive user dot files"
+          shell: |
+            #!/usr/bin/env bash
+            a_output2=(); a_output3=()
+            l_valid_shells="^($( awk -F\/ '$NF != "nologin" {print}' /etc/shells | sed \
+            -rn '/^\//{s,/,\\\\/,g;p}' | paste -s -d '|' - ))$"
+            a_user_and_home=()
+            while read -r l_local_user l_local_user_home; do
+              [[ -n "$l_local_user" && -n "$l_local_user_home" ]] && a_user_and_home+=("$l_local_user:$l_local_user_home")
+            done <<< "$(awk -v pat="$l_valid_shells" -F: '$(NF) ~ pat { print $1 " " $(NF-1) }' /etc/passwd)"
+            file_access_chk()
+            {
+              a_access_out=()
+              l_max="$( printf '%o' $(( 0777 & ~$l_mask)) )"
+              [ $(( $l_mode & $l_mask )) -gt 0 ] && a_access_out+=(" - File: \"$l_hdfile\" is mode: \"$l_mode\" should be mode: \"$l_max\" or more restrictive")
+              [[ ! "$l_owner" =~ ($l_user) ]] && a_access_out+=(" - File: \"$l_hdfile\" owned by: \"$l_owner\" should be owned by \"${l_user//|/ or }\"")
+              [[ ! "$l_gowner" =~ ($l_group) ]] && a_access_out+=(" - File: \"$l_hdfile\" group owned by: \"$l_gowner\" should be group owned by \"${l_group//|/ or }\"")
+            }
+            while IFS=: read -r l_user l_home; do
+              a_dot_file=(); a_netrc=(); a_netrc_warn=(); a_bhout=(); a_hdirout=()
+              if [ -d "$l_home" ]; then
+                l_group="$(id -gn "$l_user" | xargs)"; l_group="${l_group// /|}"
+                while IFS= read -r -d $'\0' l_hdfile; do
+                  while read -r l_mode l_owner l_gowner; do
+                    case "$(basename "$l_hdfile")" in
+                      .forward | .rhost ) a_dot_file+=(" - File: \"$l_hdfile\" exists") ;;
+                      .netrc ) l_mask='0177'; file_access_chk
+                        if [ "${#a_access_out[@]}" -gt 0 ]; then a_netrc+=("${a_access_out[@]}")
+                        else a_netrc_warn+=(" - File: \"$l_hdfile\" exists"); fi ;;
+                      .bash_history ) l_mask='0177'; file_access_chk
+                        [ "${#a_access_out[@]}" -gt 0 ] && a_bhout+=("${a_access_out[@]}") ;;
+                      * ) l_mask='0133'; file_access_chk
+                        [ "${#a_access_out[@]}" -gt 0 ] && a_hdirout+=("${a_access_out[@]}") ;;
+                    esac
+                  done < <(stat -Lc '%#a %U %G' "$l_hdfile")
+                done < <(find "$l_home" -xdev -type f -name '.*' -print0)
+              fi
+              if [[ "${#a_dot_file[@]}" -gt 0 || "${#a_netrc[@]}" -gt 0 || "${#a_bhout[@]}" -gt 0 || "${#a_hdirout[@]}" -gt 0 ]]; then
+                a_output2+=(" - User: \"$l_user\" Home Directory: \"$l_home\"" "${a_dot_file[@]}" "${a_netrc[@]}" "${a_bhout[@]}" "${a_hdirout[@]}")
+              fi
+              [ "${#a_netrc_warn[@]}" -gt 0 ] && a_output3+=(" - User: \"$l_user\" Home Directory: \"$l_home\"" "${a_netrc_warn[@]}")
+            done <<< "$(printf '%s\n' "${a_user_and_home[@]}")"
+            if [ "${#a_output2[@]}" -le 0 ]; then
+              [ "${#a_output3[@]}" -gt 0 ] && printf '%s\n' " ** WARNING **" "${a_output3[@]}"
+              printf '%s\n' "- Audit Result:" " ** PASS **"
+            else
+              printf '%s\n' "- Audit Result:" " ** FAIL **" " - * Reasons for audit failure * :" "${a_output2[@]}" ""
+              [ "${#a_output3[@]}" -gt 0 ] && printf '%s\n' " ** WARNING **" "${a_output3[@]}"
+            fi
+          register: dot_files_audit
+          changed_when: false
+          failed_when: false
+
+        - name: "Remediate local interactive user dot files"
+          shell: |
+            #!/usr/bin/env bash
+            a_output2=(); a_output3=()
+            l_valid_shells="^($( awk -F\/ '$NF != "nologin" {print}' /etc/shells | sed \
+            -rn '/^\//{s,/,\\\\/,g;p}' | paste -s -d '|' - ))$"
+            a_user_and_home=()
+            while read -r l_local_user l_local_user_home; do
+              [[ -n "$l_local_user" && -n "$l_local_user_home" ]] && a_user_and_home+=("$l_local_user:$l_local_user_home")
+            done <<< "$(awk -v pat="$l_valid_shells" -F: '$(NF) ~ pat { print $1 " " $(NF-1) }' /etc/passwd)"
+            file_access_fix()
+            {
+              l_max="$( printf '%o' $(( 0777 & ~$l_mask)) )"
+              if [ $(( $l_mode & $l_mask )) -gt 0 ]; then
+                printf '%s\n' " - File: \"$l_hdfile\" is mode: \"$l_mode\" - updating to mode: \"$l_max\" or more restrictive"
+                chmod "$l_change" "$l_hdfile"
+              fi
+              if [[ ! "$l_owner" =~ ($l_user) ]]; then
+                printf '%s\n' " - File: \"$l_hdfile\" owned by: \"$l_owner\" - updating ownership to \"${l_user//|/ or }\""
+                chown "$l_user" "$l_hdfile"
+              fi
+              if [[ ! "$l_gowner" =~ ($l_group) ]]; then
+                printf '%s\n' " - File: \"$l_hdfile\" group owned by: \"$l_gowner\" - updating group ownership to \"${l_group//|/ or }\""
+                chgrp "$l_group" "$l_hdfile"
+              fi
+            }
+            while IFS=: read -r l_user l_home; do
+              a_dot_file=(); a_netrc_warn=()
+              if [ -d "$l_home" ]; then
+                l_group="$(id -gn "$l_user" | xargs)"; l_group="${l_group// /|}"
+                while IFS= read -r -d $'\0' l_hdfile; do
+                  while read -r l_mode l_owner l_gowner; do
+                    case "$(basename "$l_hdfile")" in
+                      .forward | .rhost ) a_dot_file+=(" - File: \"$l_hdfile\" exists - Please review and manually delete this file") ;;
+                      .netrc ) l_mask='0177'; l_change="u-x,go-rwx"; file_access_fix; a_netrc_warn+=(" - File: \"$l_hdfile\" exists") ;;
+                      .bash_history ) l_mask='0177'; l_change="u-x,go-rwx"; file_access_fix ;;
+                      * ) l_mask='0133'; l_change="u-x,go-wx"; file_access_fix ;;
+                    esac
+                  done < <(stat -Lc '%#a %U %G' "$l_hdfile")
+                done < <(find "$l_home" -xdev -type f -name '.*' -print0)
+              fi
+              [ "${#a_dot_file[@]}" -gt 0 ] && a_output2+=(" - User: \"$l_user\" Home Directory: \"$l_home\"" "${a_dot_file[@]}")
+              [ "${#a_netrc_warn[@]}" -gt 0 ] && a_output3+=(" - User: \"$l_user\" Home Directory: \"$l_home\"" "${a_netrc_warn[@]}")
+            done <<< "$(printf '%s\n' "${a_user_and_home[@]}")"
+            [ "${#a_output3[@]}" -gt 0 ] && printf '%s\n' "" " ** WARNING **" "${a_output3[@]}" ""
+            [ "${#a_output2[@]}" -gt 0 ] && printf '%s\n' "" "${a_output2[@]}"
+          register: dot_files_fix
+          changed_when: false
+          failed_when: false
+
+        - name: "Display dot files remediation status"
+          debug:
+            msg: >
+              Dot file permissions, ownership, and group ownership have been corrected.
+              .forward and .rhost files (if found) require MANUAL deletion.
+              .netrc files (if present) have been secured but should be reviewed for necessity.
