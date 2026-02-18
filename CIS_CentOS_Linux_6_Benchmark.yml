@@ -1,0 +1,77 @@
+---
+# CIS Benchmark CentOS Linux 6
+# Controles implementados:
+# 1.2.1 Ensure package manager repositories are configured (Manual)
+# 1.2.3 Ensure GPG keys are configured (Manual)
+# 1.4.1 Ensure permissions on bootloader config are configured (Automated)
+
+- name: CIS CentOS Linux 6 Benchmark
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # 1.2.1 Ensure package manager repositories are configured (Manual)
+    - name: "1.2.1 Ensure package manager repositories are configured (Manual)"
+      block:
+        - name: "1.2.1 - List configured repositories"
+          command: yum repolist
+          register: yum_repolist
+          changed_when: false
+          failed_when: false
+
+        - name: "1.2.1 - Display configured repositories"
+          debug:
+            msg:
+              - "CIS 1.2.1 - Package Manager Repositories:"
+              - "{{ yum_repolist.stdout_lines }}"
+              - "Review the list above to ensure repositories are configured according to site policy."
+
+    # 1.2.3 Ensure GPG keys are configured (Manual)
+    - name: "1.2.3 Ensure GPG keys are configured (Manual)"
+      block:
+        - name: "1.2.3 - List configured GPG keys"
+          command: rpm -q gpg-pubkey --qf '%{name}-%{version}-%{release} --> %{summary}\n'
+          register: gpg_keys
+          changed_when: false
+          failed_when: false
+
+        - name: "1.2.3 - Display configured GPG keys"
+          debug:
+            msg:
+              - "CIS 1.2.3 - GPG Keys:"
+              - "{{ gpg_keys.stdout_lines }}"
+              - "Review the list above to ensure GPG keys are configured according to site policy."
+
+    # 1.4.1 Ensure permissions on bootloader config are configured (Automated)
+    - name: "1.4.1 Ensure permissions on bootloader config are configured (Automated)"
+      block:
+        - name: "1.4.1 - Check for EFI grub.conf"
+          shell: ls /boot/efi/EFI/*/grub.conf 2>/dev/null
+          register: efi_grub_check
+          changed_when: false
+          failed_when: false
+
+        - name: "1.4.1 - Set permissions on EFI grub.conf"
+          file:
+            path: "{{ item }}"
+            owner: root
+            group: root
+            mode: '0600'
+          loop: "{{ efi_grub_check.stdout_lines }}"
+          when: efi_grub_check.rc == 0
+
+        - name: "1.4.1 - Check for standard grub.conf"
+          stat:
+            path: /boot/grub/grub.conf
+          register: standard_grub_check
+
+        - name: "1.4.1 - Set permissions on /boot/grub/grub.conf"
+          file:
+            path: /boot/grub/grub.conf
+            owner: root
+            group: root
+            mode: '0600'
+          when:
+            - standard_grub_check.stat.exists
+            - efi_grub_check.rc != 0

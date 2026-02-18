@@ -2378,6 +2378,20 @@
         group: shadow
         mode: "0640"
         mode_mask: "0137"
+      - cis_control: "6.1.8"
+        path: /etc/gshadow-
+        owner: root
+        group: shadow
+        mode: "0640"
+        mode_mask: "0137"
+        description: "Asegurar permisos en el backup de gshadow"
+      - cis_control: "6.1.9"
+        path: /etc/shells
+        owner: root
+        group: root
+        mode: "0644"
+        mode_mask: "0133"
+        description: "Asegurar permisos en la lista de shells válidos"
 
   tasks:
 
@@ -2459,3 +2473,227 @@
       loop: "{{ files_final.results }}"
       loop_control:
         label: "CIS {{ item.item.cis_control }}"
+
+# =============================================================================
+# PLAY 17: CIS 6.1.10 & 6.1.11 - Permisos en opasswd y archivos world-writable
+#   6.1.10 - /etc/security/opasswd (600 root:root)
+#   6.1.11 - Asegurar archivos y directorios world-writable
+# Referencia: NIST SP 800-53 Rev. 5: AC-3, MP-2
+# CIS Controls v8: 3.3 | v7: 14.6 | MITRE: T1003, T1222/TA0005/M1022
+# =============================================================================
+- name: CIS 6.1.10 & 6.1.11 - Permisos en opasswd y archivos world-writable
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    # --------------------------------------------------------------------------
+    # CIS 6.1.10 - Permisos en /etc/security/opasswd y opasswd.old
+    # --------------------------------------------------------------------------
+    - name: CIS 6.1.10 - Auditar permisos en /etc/security/opasswd y opasswd.old
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - /etc/security/opasswd
+        - /etc/security/opasswd.old
+      register: opasswd_audit
+      changed_when: false
+      failed_when: false
+
+    - name: CIS 6.1.10 - Configurar permisos en /etc/security/opasswd y opasswd.old
+      ansible.builtin.file:
+        path: "{{ item.item }}"
+        owner: root
+        group: root
+        mode: '0600'
+      loop: "{{ opasswd_audit.results }}"
+      when: item.stat.exists
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: CIS 6.1.10 - Resumen final de auditoría
+      ansible.builtin.debug:
+        msg: >-
+          [CIS 6.1.10] {{ item.item }}:
+          {% if not item.stat.exists %}PASS ✓ (No existe)
+          {% else %}Permisos configurados a 0600 root:root
+          {% endif %}
+      loop: "{{ opasswd_audit.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    # --------------------------------------------------------------------------
+    # CIS 6.1.11 - Asegurar archivos y directorios world-writable
+    # --------------------------------------------------------------------------
+    - name: CIS 6.1.11 - Auditar archivos y directorios world-writable
+      ansible.builtin.shell: |
+        #!/usr/bin/env bash
+        l_output2=""
+        l_smask='01000'
+        a_path=(! -path "/run/user/*" -a ! -path "/proc/*" -a ! -path "*/containerd/*" -a ! -path "*/kubelet/pods/*" -a ! -path "/sys/kernel/security/apparmor/*" -a ! -path "/snap/*" -a ! -path "/sys/fs/cgroup/memory/*")
+        a_file=()
+        a_dir=()
+        
+        while read -r l_mount; do
+          while IFS= read -r -d $'\0' l_file; do
+            if [ -e "$l_file" ]; then
+              [ -f "$l_file" ] && a_file+=("$l_file")
+              if [ -d "$l_file" ]; then
+                l_mode="$(stat -Lc '%#a' "$l_file")"
+                [ ! $(( $l_mode & $l_smask )) -gt 0 ] && a_dir+=("$l_file")
+              fi
+            fi
+          done < <(find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o \( -type f -o -type d \) -perm -0002 -print0 2>/dev/null)
+        done < <(findmnt -Dkerno fstype,target | awk '$1 !~ /^\s*(nfs|proc|smb)/ {print $2}')
+        
+        if (( ${#a_file[@]} > 0 )); then
+          l_output2="$l_output2\n- World writable files found:\n$(printf '%s\n' "${a_file[@]}")"
+        fi
+        
+        if (( ${#a_dir[@]} > 0 )); then
+          l_output2="$l_output2\n- World writable directories without sticky bit found:\n$(printf '%s\n' "${a_dir[@]}")"
+        fi
+        
+        if [ -z "$l_output2" ]; then
+          echo -e "\n- Audit Result: ** PASS **\n- No se encontraron archivos o directorios world-writable inseguros."
+        else
+          echo -e "\n- Audit Result: ** FAIL **\n$l_output2"
+        fi
+      register: world_writable_audit
+      changed_when: false
+      failed_when: false
+
+    - name: CIS 6.1.11 - Mostrar resultado de auditoría
+      ansible.builtin.debug:
+        msg: "{{ world_writable_audit.stdout_lines }}"
+
+    - name: CIS 6.1.11 - Remediar archivos y directorios world-writable
+      ansible.builtin.shell: |
+        #!/usr/bin/env bash
+        l_smask='01000'
+        a_path=(! -path "/run/user/*" -a ! -path "/proc/*" -a ! -path "*/containerd/*" -a ! -path "*/kubelet/pods/*" -a ! -path "/sys/kernel/security/apparmor/*" -a ! -path "/snap/*" -a ! -path "/sys/fs/cgroup/memory/*")
+        
+        while read -r l_mount; do
+          find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o -type f -perm -0002 -print0 2>/dev/null | xargs -0 --no-run-if-empty chmod o-w
+          find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o -type d \( -perm -0002 -a ! -perm -1000 \) -print0 2>/dev/null | xargs -0 --no-run-if-empty chmod a+t
+        done < <(findmnt -Dkerno fstype,target | awk '$1 !~ /^\s*(nfs|proc|smb)/ {print $2}')
+      register: world_writable_remediation
+      changed_when: "'FAIL' in world_writable_audit.stdout"
+      failed_when: false
+
+    - name: CIS 6.1.11 - Mostrar resultado de remediación
+      ansible.builtin.debug:
+        msg: "Remediación de archivos y directorios world-writable completada."
+      when: world_writable_remediation.changed
+
+    # --------------------------------------------------------------------------
+    # SECCIÓN 6.2 - Configuración de Usuarios y Grupos
+    # --------------------------------------------------------------------------
+
+    - name: "6.2.9 Ensure root PATH Integrity (Automated)"
+      block:
+        - name: "Audit root PATH integrity"
+          shell: |
+            RPCV="$(sudo -Hiu root env | grep '^PATH' | cut -d= -f2)"
+            echo "$RPCV" | grep -q "::" && echo "root's path contains a empty directory (::)"
+            echo "$RPCV" | grep -q ":$" && echo "root's path contains a trailing (:)"
+            for x in $(echo "$RPCV" | tr ":" " "); do
+              if [ -d "$x" ]; then
+                ls -ldH "$x" | awk '$9 == "." {print "PATH contains current working directory (.)"}
+                $3 != "root" {print $9, "is not owned by root"}
+                substr($1,6,1) != "-" {print $9, "is group writable"}
+                substr($1,9,1) != "-" {print $9, "is world writable"}'
+              else
+                echo "$x is not a directory"
+              fi
+            done
+          register: root_path_check
+          changed_when: false
+          failed_when: false
+
+        - name: "Display root PATH integrity status"
+          debug:
+            msg:
+              - "Root PATH Audit Results:"
+              - "{{ root_path_check.stdout_lines }}"
+          when: root_path_check.stdout != ""
+
+        - name: "Fail if root PATH integrity issues found"
+          fail:
+            msg: "Root PATH contains insecure entries. Check debug output."
+          when: root_path_check.stdout != ""
+
+    - name: "6.2.10 Ensure root is the only UID 0 account (Automated)"
+      block:
+        - name: "Check for UID 0 accounts"
+          shell: awk -F: '($3 == 0) { print $1 }' /etc/passwd
+          register: uid_zero_accounts
+          changed_when: false
+
+        - name: "Verify only root has UID 0"
+          assert:
+            that:
+              - uid_zero_accounts.stdout == 'root'
+            fail_msg: "Found non-root accounts with UID 0: {{ uid_zero_accounts.stdout }}"
+            success_msg: "Only root has UID 0."
+
+    - name: "6.2.12 Ensure local interactive user dot files access is configured (Automated)"
+      block:
+        - name: "Remediate user dot files access"
+          shell: |
+            #!/usr/bin/env bash
+            l_valid_shells="^($( awk -F\/ '$NF != "nologin" {print}' /etc/shells | sed -rn '/^\//{s,/,\\\\/,g;p}' | paste -s -d '|' - ))$"
+            
+            awk -v pat="$l_valid_shells" -F: '$(NF) ~ pat { print $1 " " $(NF-1) }' /etc/passwd | while read -r l_user l_home; do
+              if [ -d "$l_home" ]; then
+                l_group="$(id -gn "$l_user" | xargs)"
+                
+                find "$l_home" -xdev -type f -name '.*' -print0 | while IFS= read -r -d $'\0' l_hdfile; do
+                  file_name=$(basename "$l_hdfile")
+                  case "$file_name" in
+                    .forward | .rhost )
+                      echo "File: \"$l_hdfile\" exists. Please investigate and manually delete."
+                      ;;
+                    .netrc )
+                      l_mask='0177'
+                      l_chp="u-x,go-rwx"
+                      ;;
+                    .bash_history )
+                      l_mask='0177'
+                      l_chp="u-x,go-rwx"
+                      ;;
+                    * )
+                      l_mask='0133'
+                      l_chp="u-x,go-wx"
+                      ;;
+                  esac
+
+                  if [ "$file_name" != ".forward" ] && [ "$file_name" != ".rhost" ]; then
+                    l_mode=$(stat -Lc '%#a' "$l_hdfile")
+                    if [ $(( $l_mode & $l_mask )) -gt 0 ]; then
+                      chmod "$l_chp" "$l_hdfile"
+                      echo "Fixed permissions for $l_hdfile"
+                    fi
+                    l_owner=$(stat -Lc '%U' "$l_hdfile")
+                    if [ "$l_owner" != "$l_user" ]; then
+                      chown "$l_user" "$l_hdfile"
+                      echo "Fixed owner for $l_hdfile"
+                    fi
+                    l_gowner=$(stat -Lc '%G' "$l_hdfile")
+                    if [ "$l_gowner" != "$l_group" ]; then
+                      chgrp "$l_group" "$l_hdfile"
+                      echo "Fixed group for $l_hdfile"
+                    fi
+                  fi
+                done
+              fi
+            done
+          register: dotfiles_remediation
+          changed_when: "'Fixed' in dotfiles_remediation.stdout"
+          failed_when: false
+
+        - name: "Display dot files remediation results"
+          debug:
+            msg: "{{ dotfiles_remediation.stdout_lines }}"
+          when: dotfiles_remediation.stdout != ""
