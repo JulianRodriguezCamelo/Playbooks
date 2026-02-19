@@ -10,10 +10,11 @@ El repositorio incluye playbooks para las siguientes plataformas:
 
 | Sistema Operativo | Versión Benchmark | Nivel | Controles |
 |-------------------|-------------------|-------|-----------|
+| **Red Hat Enterprise Linux 8** | v3.1.1 | Level 1 - Server | Configuración completa |
 | **Red Hat Enterprise Linux 7** | v3.1.1 | Level 1 - Server | 12,712 líneas de configuración |
 | **Red Hat Enterprise Linux 6** | Latest | Level 1 - Server | Configuración completa |
+| **Ubuntu Linux 20.04 LTS** | Latest | Level 1 | Hardening Base |
 | **Oracle Solaris 11** | v1.1.4 | Level 1 | 5,264 líneas de configuración |
-| **Oracle Solaris 11** | v1.1.0 | Level 1 | Configuración base |
 
 ## Características Principales
 
@@ -36,29 +37,23 @@ Los playbooks cubren áreas críticas de seguridad:
 
 ### 📊 Arquitectura de Remediación
 
-Cada control sigue un flujo estructurado:
+```mermaid
+graph TD
+    Start((Inicio Control)) --> Audit{1. Auditoría}
+    Audit -->|Cumple| Log[Registrar Estado]
+    Audit -->|No Cumple| Backup[Backup Config]
+    Backup --> Remediate[2. Remediación]
+    Remediate --> Validate{3. Validación}
+    Validate -->|Éxito| Success[Reporte: Conforme]
+    Validate -->|Fallo| Fail[Reporte: Revisión Manual]
+    Log --> End((Fin))
+    Success --> End
+    Fail --> End
 
-```
-┌─────────────────────────────────────────────────────────┐
-│ 1. AUDITORÍA PRE-REMEDIACIÓN                            │
-│    • Verificación del estado actual                     │
-│    • Registro en logs de auditoría                      │
-│    • Validación de requisitos                           │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│ 2. REMEDIACIÓN                                          │
-│    • Aplicación de configuraciones                      │
-│    • Backup de archivos críticos                        │
-│    • Ejecución condicional (idempotencia)               │
-└─────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────┐
-│ 3. VALIDACIÓN POST-REMEDIACIÓN                          │
-│    • Verificación de cambios aplicados                  │
-│    • Assertions de cumplimiento                         │
-│    • Registro de estado final                           │
-└─────────────────────────────────────────────────────────┘
+    style Start fill:#90EE90,stroke:#333,stroke-width:2px
+    style End fill:#90EE90,stroke:#333,stroke-width:2px
+    style Remediate fill:#FFB6C1,stroke:#333,stroke-width:2px
+    style Audit fill:#87CEEB,stroke:#333,stroke-width:2px
 ```
 
 ## Implementación
