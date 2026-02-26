@@ -1,0 +1,2391 @@
+---
+# =============================================================================
+# ANSIBLE PLAYBOOK — CIS 8 Benchmark RHEL
+# Controles:
+#   1.1.1.1 Ensure mounting of cramfs filesystems is disabled (Automated)
+#   1.2.1   Ensure GPG keys are configured (Manual)
+#   1.2.2   Ensure gpgcheck is globally activated (Automated)
+#   1.2.3   Ensure package manager repositories are configured (Manual)
+#   1.3.1   Ensure AIDE is installed (Automated)
+#   1.3.2   Ensure filesystem integrity is regularly checked (Automated)
+#   1.4.1   Ensure bootloader password is set (Automated)
+#   1.4.2   Ensure permissions on bootloader config are configured (Automated)
+#   1.4.3   Ensure authentication is required when booting into rescue mode (Automated)
+# Profile   : Level 1 - Server | Level 1 - Workstation
+# =============================================================================
+#
+# Ejecución:
+#   ansible-playbook -i inventory playbook.yml
+#   ansible-playbook -i inventory playbook.yml --tags cis_1.3.1
+#   ansible-playbook -i inventory playbook.yml --skip-tags manual
+#
+# =============================================================================
+
+- name: "CIS 8 Benchmark RHEL | Level 1 - Server | Level 1 - Workstation"
+  hosts: all
+  become: true
+  gather_facts: true
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # 1.1.1.1 — Ensure mounting of cramfs filesystems is disabled
+    # -------------------------------------------------------------------------
+    - name: "1.1.1.1 | L1 | Ensure mounting of cramfs filesystems is disabled"
+      block:
+        - name: "1.1.1.1 | ROM | Configure cramfs module disablement"
+          ansible.builtin.copy:
+            dest: /etc/modprobe.d/cramfs.conf
+            content: |
+              install cramfs /bin/false
+              blacklist cramfs
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: "1.1.1.1 | ROM | Unload cramfs module if currently loaded"
+          community.general.modprobe:
+            name: cramfs
+            state: absent
+          failed_when: false
+
+      tags:
+        - cis_1.1.1.1
+        - level1_server
+        - level1_workstation
+        - filesystems
+
+    # -------------------------------------------------------------------------
+    # 1.2.1 — Ensure GPG keys are configured (Manual)
+    # Nota: Control manual — se audita pero no se puede remediar automáticamente
+    # ya que las GPG keys dependen de la política de cada sitio/organización.
+    # -------------------------------------------------------------------------
+    - name: "1.2.1 | L1 | Ensure GPG keys are configured"
+      block:
+        - name: "1.2.1 | AUDIT | List GPG keys configured in repositories"
+          ansible.builtin.shell: |
+            grep -r gpgkey /etc/yum.repos.d/* /etc/dnf/dnf.conf 2>/dev/null || true
+          register: cis_1_2_1_gpgkey_repos
+          changed_when: false
+          check_mode: false
+
+        - name: "1.2.1 | AUDIT | List currently installed GPG public keys"
+          ansible.builtin.shell: |
+            for RPM_PACKAGE in $(rpm -q gpg-pubkey 2>/dev/null); do
+              echo "RPM: ${RPM_PACKAGE}"
+              rpm -q --queryformat "Packager: %{PACKAGER}\nSummary: %{SUMMARY}\nKey ID: %{VERSION}\n\n" \
+                "${RPM_PACKAGE}"
+            done
+          register: cis_1_2_1_installed_keys
+          changed_when: false
+          check_mode: false
+
+        - name: "1.2.1 | AUDIT | Display GPG audit results"
+          ansible.builtin.debug:
+            msg:
+              - "=== GPG Keys en repositorios ==="
+              - "{{ cis_1_2_1_gpgkey_repos.stdout_lines }}"
+              - "=== GPG Keys instaladas ==="
+              - "{{ cis_1_2_1_installed_keys.stdout_lines }}"
+
+      tags:
+        - cis_1.2.1
+        - level1_server
+        - level1_workstation
+        - gpg
+        - manual
+        - audit_only
+
+    # -------------------------------------------------------------------------
+    # 1.2.2 — Ensure gpgcheck is globally activated (Automated)
+    # -------------------------------------------------------------------------
+    - name: "1.2.2 | L1 | Ensure gpgcheck is globally activated"
+      block:
+        - name: "1.2.2 | ROM | Ensure gpgcheck=1 in /etc/dnf/dnf.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/dnf/dnf.conf
+            regexp: '^gpgcheck\s*='
+            line: "gpgcheck=1"
+            state: present
+            backup: true
+
+        - name: "1.2.2 | ROM | Find all .repo files in /etc/yum.repos.d/"
+          ansible.builtin.find:
+            paths: /etc/yum.repos.d/
+            patterns: "*.repo"
+          register: cis_1_2_2_repo_files
+
+        - name: "1.2.2 | ROM | Ensure gpgcheck=1 in all .repo files"
+          ansible.builtin.lineinfile:
+            path: "{{ item.path }}"
+            regexp: '^gpgcheck\s*='
+            line: "gpgcheck=1"
+            state: present
+            backup: true
+          loop: "{{ cis_1_2_2_repo_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+      tags:
+        - cis_1.2.2
+        - level1_server
+        - level1_workstation
+        - gpg
+        - package_manager
+
+    # -------------------------------------------------------------------------
+    # 1.2.3 — Ensure package manager repositories are configured (Manual)
+    # Nota: Control manual — se audita el estado actual de los repositorios
+    # pero la configuración depende de la política de cada organización.
+    # -------------------------------------------------------------------------
+    - name: "1.2.3 | L1 | Ensure package manager repositories are configured"
+      block:
+        - name: "1.2.3 | AUDIT | List currently configured repositories"
+          ansible.builtin.command: dnf repolist
+          register: cis_1_2_3_repolist
+          changed_when: false
+          check_mode: false
+
+        - name: "1.2.3 | AUDIT | Display repository list"
+          ansible.builtin.debug:
+            msg:
+              - "=== Repositorios configurados ==="
+              - "{{ cis_1_2_3_repolist.stdout_lines }}"
+              - "ACCIÓN REQUERIDA: Verificar manualmente que los repositorios"
+              - "listados sean correctos y estén alineados con la política del sitio."
+
+      tags:
+        - cis_1.2.3
+        - level1_server
+        - level1_workstation
+        - package_manager
+        - manual
+        - audit_only
+
+    # -------------------------------------------------------------------------
+    # 1.3.1 — Ensure AIDE is installed
+    # -------------------------------------------------------------------------
+    - name: "1.3.1 | L1 | Ensure AIDE is installed"
+      block:
+        - name: "1.3.1 | ROM | Install AIDE package"
+          ansible.builtin.dnf:
+            name: aide
+            state: present
+
+        - name: "1.3.1 | ROM | Check if AIDE database already exists"
+          ansible.builtin.stat:
+            path: /var/lib/aide/aide.db.gz
+          register: cis_1_3_1_aide_db
+
+        - name: "1.3.1 | ROM | Initialize AIDE database (first run)"
+          ansible.builtin.command: aide --init
+          args:
+            creates: /var/lib/aide/aide.db.new.gz
+          when: not cis_1_3_1_aide_db.stat.exists
+          register: cis_1_3_1_aide_init
+          changed_when: cis_1_3_1_aide_init.rc == 0
+
+        - name: "1.3.1 | ROM | Activate AIDE database"
+          ansible.builtin.command:
+            cmd: mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          args:
+            removes: /var/lib/aide/aide.db.new.gz
+          when:
+            - not cis_1_3_1_aide_db.stat.exists
+            - cis_1_3_1_aide_init is defined
+            - cis_1_3_1_aide_init.changed
+
+      tags:
+        - cis_1.3.1
+        - level1_server
+        - level1_workstation
+        - aide
+        - integrity
+
+    # -------------------------------------------------------------------------
+    # 1.3.2 — Ensure filesystem integrity is regularly checked
+    # -------------------------------------------------------------------------
+    - name: "1.3.2 | L1 | Ensure filesystem integrity is regularly checked"
+      block:
+        - name: "1.3.2 | ROM | Create aidecheck systemd service unit"
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/aidecheck.service
+            content: |
+              [Unit]
+              Description=Aide Check
+
+              [Service]
+              Type=simple
+              ExecStart=/usr/sbin/aide --check
+
+              [Install]
+              WantedBy=multi-user.target
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: "1.3.2 | ROM | Create aidecheck systemd timer unit"
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/aidecheck.timer
+            content: |
+              [Unit]
+              Description=Aide check every day at 5AM
+
+              [Timer]
+              OnCalendar=*-*-* 05:00:00
+              Unit=aidecheck.service
+
+              [Install]
+              WantedBy=multi-user.target
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: "1.3.2 | ROM | Reload systemd daemon"
+          ansible.builtin.systemd:
+            daemon_reload: true
+
+        - name: "1.3.2 | ROM | Enable aidecheck.service"
+          ansible.builtin.systemd:
+            name: aidecheck.service
+            enabled: true
+
+        - name: "1.3.2 | ROM | Enable and start aidecheck.timer"
+          ansible.builtin.systemd:
+            name: aidecheck.timer
+            enabled: true
+            state: started
+
+      tags:
+        - cis_1.3.2
+        - level1_server
+        - level1_workstation
+        - aide
+        - integrity
+
+    - name: "1.4.1 | L1 | Ensure bootloader password is set"
+      block:
+        - name: "1.4.1 | ROM | Deploy GRUB2 superuser and password via user.cfg"
+          ansible.builtin.copy:
+            dest: /boot/grub2/user.cfg
+            content: |
+              GRUB2_PASSWORD={{ grub2_password_hash }}
+            owner: root
+            group: root
+            mode: "0600"
+          when: grub2_password_hash is defined
+
+        - name: "1.4.1 | ROM | Rebuild grub2 configuration"
+          ansible.builtin.shell: |
+            grub2-mkconfig -o "$(dirname "$(find /boot -type f \( -name 'grubenv' \
+            -o -name 'grub.conf' -o -name 'grub.cfg' \) \
+            -exec grep -Pl '^\h*(kernelopts=|linux|kernel)' {} \;)")/grub.cfg"
+          changed_when: true
+          when: grub2_password_hash is defined
+
+        - name: "1.4.1 | WARN | Advertencia si grub2_password_hash no está definido"
+          ansible.builtin.debug:
+            msg:
+              - "ADVERTENCIA: La variable 'grub2_password_hash' no está definida."
+              - "Defínala en el vault de Ansible con el hash generado por grub2-mkpasswd-pbkdf2."
+              - "Ejemplo: grub2_password_hash: grub.pbkdf2.sha512.10000.<hash>"
+          when: grub2_password_hash is not defined
+
+      tags:
+        - cis_1.4.1
+        - level1_server
+        - level1_workstation
+        - bootloader
+
+    - name: "1.4.2 | L1 | Ensure permissions on bootloader config are configured"
+      block:
+        - name: "1.4.2 | ROM | Find bootloader config files"
+          ansible.builtin.find:
+            paths: /boot/grub2/
+            patterns:
+              - "grub.cfg"
+              - "grubenv"
+              - "user.cfg"
+          register: cis_1_4_2_grub_files
+
+        - name: "1.4.2 | ROM | Set root ownership on bootloader config files"
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            owner: root
+            group: root
+            mode: "0600"
+          loop: "{{ cis_1_4_2_grub_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+      tags:
+        - cis_1.4.2
+        - level1_server
+        - level1_workstation
+        - bootloader
+
+    - name: "1.4.3 | L1 | Ensure authentication is required when booting into rescue mode"
+      block:
+        - name: "1.4.3 | ROM | Create systemd drop-in directory for rescue.service"
+          ansible.builtin.file:
+            path: /etc/systemd/system/rescue.service.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: "1.4.3 | ROM | Deploy rescue mode authentication drop-in config"
+          ansible.builtin.copy:
+            dest: /etc/systemd/system/rescue.service.d/00-require-auth.conf
+            content: |
+              [Service]
+              ExecStart=-/usr/lib/systemd/systemd-sulogin-shell rescue
+            owner: root
+            group: root
+            mode: "0644"
+          notify: Reload systemd daemon
+
+      tags:
+        - cis_1.4.3
+        - level1_server
+        - level1_workstation
+        - bootloader
+        - rescue_mode
+
+    - name: "1.5.1 | L1 | Ensure core dump storage is disabled"
+      block:
+        - name: "1.5.1 | ROM | Configure Storage=none in coredump.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/coredump.conf
+            regexp: "^#?Storage="
+            line: "Storage=none"
+            state: present
+            backup: true
+
+      tags:
+        - cis_1.5.1
+        - level1_server
+        - level1_workstation
+        - coredump
+
+    - name: "1.5.2 | L1 | Ensure core dump backtraces are disabled"
+      block:
+        - name: "1.5.2 | ROM | Configure ProcessSizeMax=0 in coredump.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/coredump.conf
+            regexp: "^#?ProcessSizeMax="
+            line: "ProcessSizeMax=0"
+            state: present
+            backup: true
+
+      tags:
+        - cis_1.5.2
+        - level1_server
+        - level1_workstation
+        - coredump
+
+    - name: "1.5.3 | L1 | Ensure ASLR is enabled"
+      block:
+        - name: "1.5.3 | ROM | Set kernel.randomize_va_space to 2"
+          ansible.posix.sysctl:
+            name: kernel.randomize_va_space
+            value: "2"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-kernel_sysctl.conf
+
+      tags:
+        - cis_1.5.3
+        - level1_server
+        - level1_workstation
+        - sysctl
+        - aslr
+
+    - name: "1.6.1.1 | L1 | Ensure SELinux is installed"
+      block:
+        - name: "1.6.1.1 | ROM | Install libselinux package"
+          ansible.builtin.dnf:
+            name: libselinux
+            state: present
+
+      tags:
+        - cis_1.6.1.1
+        - level1_server
+        - level1_workstation
+        - selinux
+
+    - name: "1.6.1.7 | L1 | Ensure SETroubleshoot is not installed"
+      block:
+        - name: "1.6.1.7 | ROM | Remove setroubleshoot package"
+          ansible.builtin.dnf:
+            name: setroubleshoot
+            state: absent
+
+      tags:
+        - cis_1.6.1.7
+        - level1_server
+        - services
+
+    - name: "1.6.1.8 | L1 | Ensure mcstrans is not installed"
+      block:
+        - name: "1.6.1.8 | ROM | Remove mcstrans package"
+          ansible.builtin.dnf:
+            name: mcstrans
+            state: absent
+
+      tags:
+        - cis_1.6.1.8
+        - level1_server
+        - level1_workstation
+        - services
+
+    - name: "1.7.1 | L1 | Ensure message of the day is configured properly"
+      block:
+        - name: "1.7.1 | ROM | Set secure /etc/motd content"
+          ansible.builtin.copy:
+            dest: /etc/motd
+            content: "{{ cis_1_7_1_motd_content | default('AUTHORIZED USE ONLY. All activity may be monitored and reported.') }}"
+            owner: root
+            group: root
+            mode: "0644"
+
+        - name: "1.7.1 | ROM | Remove system information tokens from /etc/motd"
+          ansible.builtin.replace:
+            path: /etc/motd
+            regexp: '(\\v|\\r|\\m|\\s)'
+            replace: ""
+
+      tags:
+        - cis_1.7.1
+        - level1_server
+        - level1_workstation
+        - banner
+
+    - name: "1.7.2 | L1 | Ensure local login warning banner is configured"
+      block:
+        - name: "1.7.2 | ROM | Set secure /etc/issue content"
+          ansible.builtin.copy:
+            dest: /etc/issue
+            content: "{{ cis_1_7_banner_content | default('Authorized uses only. All activity may be monitored and reported.\n') }}"
+            owner: root
+            group: root
+            mode: "0644"
+
+      tags:
+        - cis_1.7.2
+        - level1_server
+        - level1_workstation
+        - banner
+
+    - name: "1.7.3 | L1 | Ensure remote login warning banner is configured"
+      block:
+        - name: "1.7.3 | ROM | Set secure /etc/issue.net content"
+          ansible.builtin.copy:
+            dest: /etc/issue.net
+            content: "{{ cis_1_7_banner_content | default('Authorized uses only. All activity may be monitored and reported.\n') }}"
+            owner: root
+            group: root
+            mode: "0644"
+
+      tags:
+        - cis_1.7.3
+        - level1_server
+        - level1_workstation
+        - banner
+
+    - name: "1.7.4-1.7.6 | L1 | Ensure permissions on login banners"
+      block:
+        - name: "1.7.4-1.7.6 | ROM | Set ownership and permissions on banner files"
+          ansible.builtin.file:
+            path: "{{ item }}"
+            owner: root
+            group: root
+            mode: "0644"
+            state: file
+          loop:
+            - /etc/motd
+            - /etc/issue
+            - /etc/issue.net
+          ignore_errors: true
+
+        - name: "1.7.4-1.7.6 | ROM | Remove system information tokens from all banners"
+          ansible.builtin.replace:
+            path: "{{ item }}"
+            regexp: '(\\v|\\r|\\m|\\s)'
+            replace: ""
+          loop:
+            - /etc/motd
+            - /etc/issue
+            - /etc/issue.net
+          ignore_errors: true
+
+      tags:
+        - cis_1.7.4
+        - cis_1.7.5
+        - cis_1.7.6
+        - level1_server
+        - level1_workstation
+        - banner
+        - permissions
+
+    - name: "1.8.4 | L1 | Ensure XDMCP is not enabled"
+      block:
+        - name: "1.8.4 | ROM | Disable Enable=true in /etc/gdm/custom.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/gdm/custom.conf
+            regexp: '^\s*Enable\s*=\s*true'
+            state: absent
+            backup: true
+
+      tags:
+        - cis_1.8.4
+        - level1_server
+        - level1_workstation
+        - gdm
+
+    - name: "1.8.5 | L1/L2 | Ensure automatic mounting of removable media is disabled"
+      block:
+        - name: "1.8.5 | ROM | Create dconf profile directory"
+          ansible.builtin.file:
+            path: /etc/dconf/db/local.d
+            state: directory
+            owner: root
+            group: root
+            mode: "0755"
+
+        - name: "1.8.5 | ROM | Deploy dconf media-automount configuration"
+          ansible.builtin.copy:
+            dest: /etc/dconf/db/local.d/00-media-automount
+            content: |
+              [org/gnome/desktop/media-handling]
+              automount=false
+              automount-open=false
+            owner: root
+            group: root
+            mode: "0644"
+          register: cis_1_8_5_dconf_config
+
+        - name: "1.8.5 | ROM | Update dconf database"
+          ansible.builtin.command: dconf update
+          when: cis_1_8_5_dconf_config.changed
+
+      tags:
+        - cis_1.8.5
+        - level1_server
+        - level2_workstation
+        - gnome
+        - media
+
+    - name: "1.10 | L1 | Ensure system-wide crypto policy is not legacy"
+      block:
+        - name: "1.10 | AUDIT | Check current crypto policy"
+          ansible.builtin.command: update-crypto-policies --show
+          register: cis_1_10_current_policy
+          changed_when: false
+          check_mode: false
+
+        - name: "1.10 | ROM | Set crypto policy to DEFAULT if LEGACY is detected"
+          ansible.builtin.command: update-crypto-policies --set DEFAULT
+          when: "'LEGACY' in cis_1_10_current_policy.stdout"
+          notify: Update crypto policies
+
+      tags:
+        - cis_1.10
+        - level1_server
+        - level1_workstation
+        - crypto_policy
+
+    - name: "2.1.1 | L1 | Ensure chrony is installed"
+      block:
+        - name: "2.1.1 | ROM | Install chrony package"
+          ansible.builtin.dnf:
+            name: chrony
+            state: present
+
+      tags:
+        - cis_2.1.1
+        - level1_server
+        - level1_workstation
+        - chrony
+        - ntp
+
+    - name: "2.1.2 | L1 | Ensure chrony is configured"
+      block:
+        - name: "2.1.2 | ROM | Configure NTP servers in /etc/chrony.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/chrony.conf
+            regexp: "^(server|pool)"
+            state: absent
+          when: cis_chrony_servers is defined
+
+        - name: "2.1.2 | ROM | Add site-specific NTP servers"
+          ansible.builtin.lineinfile:
+            path: /etc/chrony.conf
+            line: "server {{ item }} iburst"
+            state: present
+          loop: "{{ cis_chrony_servers | default(['2.rhel.pool.ntp.org']) }}"
+          notify: Restart chronyd
+
+        - name: "2.1.2 | ROM | Ensure chronyd runs as user 'chrony'"
+          ansible.builtin.lineinfile:
+            path: /etc/sysconfig/chronyd
+            regexp: "^OPTIONS="
+            line: 'OPTIONS="-u chrony"'
+            state: present
+          notify: Restart chronyd
+
+        - name: "2.1.2 | ROM | Ensure chronyd is enabled and started"
+          ansible.builtin.systemd:
+            name: chronyd
+            enabled: true
+            state: started
+
+      tags:
+        - cis_2.1.2
+        - level1_server
+        - level1_workstation
+        - chrony
+        - ntp
+
+    - name: "2.2.2 | L1 | Ensure X Windows Server is not installed (Servers Only)"
+      block:
+        - name: "2.2.2 | ROM | Remove xorg-x11-server-common package"
+          ansible.builtin.dnf:
+            name: xorg-x11-server-common
+            state: absent
+
+      when: "'servers' in group_names"
+      tags:
+        - cis_2.2.2
+        - level1_server
+        - services
+
+    - name: "2.2.17 | L1 | Ensure MTA is configured for local-only mode"
+      block:
+        - name: "2.2.17 | ROM | Configure Postfix to listen only on loopback"
+          ansible.builtin.lineinfile:
+            path: /etc/postfix/main.cf
+            regexp: '^\s*inet_interfaces\s*='
+            line: "inet_interfaces = loopback-only"
+            state: present
+            backup: true
+          notify: Restart postfix
+
+      tags:
+        - cis_2.2.17
+        - level1_server
+        - level1_workstation
+        - postfix
+        - mail
+
+    - name: "2.3.1 | L1 | Ensure NIS Client is not installed"
+      block:
+        - name: "2.3.1 | ROM | Remove ypbind package"
+          ansible.builtin.dnf:
+            name: ypbind
+            state: absent
+
+      tags:
+        - cis_2.3.1
+        - level1_server
+        - level1_workstation
+        - services
+        - nis
+
+    - name: "2.3.2-2.3.6 | L1 | Ensure insecure service clients are removed"
+      block:
+        - name: "2.3.2-2.3.6 | ROM | Remove legacy network clients"
+          ansible.builtin.dnf:
+            name:
+              - rsh
+              - talk
+              - telnet
+              - openldap-clients
+              - tftp
+            state: absent
+
+      tags:
+        - cis_2.3.2
+        - cis_2.3.3
+        - cis_2.3.4
+        - cis_2.3.5
+        - cis_2.3.6
+        - level1_server
+        - level1_workstation
+        - services
+        - clients
+
+    - name: "3.2.1 | L1 | Ensure IP forwarding is disabled"
+      block:
+        - name: "3.2.1 | ROM | Disable IPv4 forwarding"
+          ansible.posix.sysctl:
+            name: net.ipv4.ip_forward
+            value: "0"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv4_sysctl.conf
+
+        - name: "3.2.1 | ROM | Disable IPv6 forwarding (if enabled)"
+          ansible.posix.sysctl:
+            name: net.ipv6.conf.all.forwarding
+            value: "0"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv6_sysctl.conf
+          when: ansible_all_ipv6_addresses | length > 0
+
+      tags:
+        - cis_3.2.1
+        - level1_server
+        - level1_workstation
+        - sysctl
+        - network
+
+    - name: "3.2.2 | L1 | Ensure packet redirect sending is disabled"
+      block:
+        - name: "3.2.2 | ROM | Disable ICMP redirect sending (all/default)"
+          ansible.posix.sysctl:
+            name: "{{ item }}"
+            value: "0"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv4_sysctl.conf
+          loop:
+            - net.ipv4.conf.all.send_redirects
+            - net.ipv4.conf.default.send_redirects
+
+        - name: "3.2.2 | ROM | Flush routing table"
+          ansible.posix.sysctl:
+            name: net.ipv4.route.flush
+            value: "1"
+            sysctl_set: true
+            state: present
+            reload: true
+
+      tags:
+        - cis_3.2.2
+        - level1_server
+        - level1_workstation
+        - sysctl
+        - network
+
+    - name: "3.3 | L1 | Network Parameter Hardening"
+      block:
+        - name: "3.3 | ROM | Configure IPv4 kernel parameters"
+          ansible.posix.sysctl:
+            name: "{{ item.name }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv4_sysctl.conf
+          loop:
+            - { name: "net.ipv4.conf.all.accept_source_route", value: "0" }
+            - { name: "net.ipv4.conf.default.accept_source_route", value: "0" }
+
+            - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+            - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
+
+            - { name: "net.ipv4.conf.all.secure_redirects", value: "0" }
+            - { name: "net.ipv4.conf.default.secure_redirects", value: "0" }
+
+            - { name: "net.ipv4.conf.all.log_martians", value: "1" }
+            - { name: "net.ipv4.conf.default.log_martians", value: "1" }
+
+            - { name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1" }
+
+            - { name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1" }
+
+        - name: "3.3 | ROM | Configure IPv6 kernel parameters"
+          ansible.posix.sysctl:
+            name: "{{ item.name }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv6_sysctl.conf
+          loop:
+            - { name: "net.ipv6.conf.all.accept_source_route", value: "0" }
+            - { name: "net.ipv6.conf.default.accept_source_route", value: "0" }
+
+            - { name: "net.ipv6.conf.all.accept_redirects", value: "0" }
+            - { name: "net.ipv6.conf.default.accept_redirects", value: "0" }
+          when: ansible_all_ipv6_addresses | length > 0
+
+        - name: "3.3 | ROM | Final routing table flush"
+          ansible.posix.sysctl:
+            name: net.ipv4.route.flush
+            value: "1"
+            sysctl_set: true
+            state: present
+            reload: true
+
+      tags:
+        - cis_3.3
+        - level1_server
+        - level1_workstation
+        - sysctl
+        - network_security
+
+    - name: "3.3.7-3.3.9 | L1 | Advanced Network Security Parameters"
+      block:
+        - name: "3.3.7-3.3.8 | ROM | Configure IPv4 Anti-Spoofing and DoS protection"
+          ansible.posix.sysctl:
+            name: "{{ item.name }}"
+            value: "{{ item.value }}"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv4_sysctl.conf
+          loop:
+            # 3.3.7 Ensure Reverse Path Filtering is enabled
+            - { name: "net.ipv4.conf.all.rp_filter", value: "1" }
+            - { name: "net.ipv4.conf.default.rp_filter", value: "1" }
+            # 3.3.8 Ensure TCP SYN Cookies is enabled
+            - { name: "net.ipv4.tcp_syncookies", value: "1" }
+
+        - name: "3.3.9 | ROM | Disable IPv6 Router Advertisements"
+          ansible.posix.sysctl:
+            name: "{{ item.name }}"
+            value: "0"
+            state: present
+            reload: true
+            sysctl_set: true
+            sysctl_file: /etc/sysctl.d/60-netipv6_sysctl.conf
+          loop:
+            - net.ipv6.conf.all.accept_ra
+            - net.ipv6.conf.default.accept_ra
+          when: ansible_all_ipv6_addresses | length > 0
+
+        - name: "3.3.7-3.3.9 | ROM | Flush routing table"
+          ansible.posix.sysctl:
+            name: net.ipv4.route.flush
+            value: "1"
+            sysctl_set: true
+            state: present
+            reload: true
+
+      tags:
+        - cis_3.3.7
+        - cis_3.3.8
+        - cis_3.3.9
+        - level1_server
+        - level1_workstation
+        - sysctl
+        - network_security
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.1 — Ensure rsyslog is installed (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.1 | L1 | Ensure rsyslog is installed"
+      block:
+        - name: "4.2.1.1 | ROM | Install rsyslog package"
+          ansible.builtin.dnf:
+            name: rsyslog
+            state: present
+
+      tags:
+        - cis_4.2.1.1
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - logging
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.2 — Ensure rsyslog service is enabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.2 | L1 | Ensure rsyslog service is enabled"
+      block:
+        - name: "4.2.1.2 | ROM | Enable and start rsyslog service"
+          ansible.builtin.systemd:
+            name: rsyslog
+            enabled: true
+            state: started
+
+      tags:
+        - cis_4.2.1.2
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - logging
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.3 — Ensure journald is configured to send logs to rsyslog (Manual)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.3 | L1 | Ensure journald is configured to send logs to rsyslog"
+      block:
+        - name: "4.2.1.3 | ROM | Set ForwardToSyslog=yes in journald.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/journald.conf
+            regexp: "^#?ForwardToSyslog="
+            line: "ForwardToSyslog=yes"
+            state: present
+            backup: true
+          notify: Restart rsyslog
+
+      tags:
+        - cis_4.2.1.3
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - journald
+        - logging
+        - manual
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.4 — Ensure rsyslog default file permissions are configured (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.4 | L1 | Ensure rsyslog default file permissions are configured"
+      block:
+        - name: "4.2.1.4 | AUDIT | Check if FileCreateMode is set in /etc/rsyslog.conf"
+          ansible.builtin.command: grep -P '^\$FileCreateMode' /etc/rsyslog.conf
+          register: cis_4_2_1_4_rsyslog_conf
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: "4.2.1.4 | ROM | Set $FileCreateMode 0640 in /etc/rsyslog.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/rsyslog.conf
+            regexp: '^\$FileCreateMode'
+            line: "$FileCreateMode 0640"
+            state: present
+            backup: true
+          notify: Restart rsyslog
+
+      tags:
+        - cis_4.2.1.4
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - logging
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.5 — Ensure logging is configured (Manual)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.5 | L1 | Ensure logging is configured"
+      block:
+        - name: "4.2.1.5 | AUDIT | List current log files in /var/log/"
+          ansible.builtin.command: ls -l /var/log/
+          register: cis_4_2_1_5_varlog
+          changed_when: false
+          check_mode: false
+
+        - name: "4.2.1.5 | AUDIT | Display /var/log/ contents"
+          ansible.builtin.debug:
+            msg:
+              - "=== Archivos de log en /var/log/ ==="
+              - "{{ cis_4_2_1_5_varlog.stdout_lines }}"
+              - "ACCIÓN REQUERIDA: Verificar manualmente que el logging esté"
+              - "configurado correctamente en /etc/rsyslog.conf y /etc/rsyslog.d/*.conf"
+
+        - name: "4.2.1.5 | ROM | Deploy rsyslog logging configuration"
+          ansible.builtin.blockinfile:
+            path: /etc/rsyslog.d/99-cis-logging.conf
+            create: true
+            owner: root
+            group: root
+            mode: "0640"
+            block: |
+              *.emerg                         :omusrmsg:*
+              auth,authpriv.*                 /var/log/secure
+              mail.*                          -/var/log/mail
+              mail.info                       -/var/log/mail.info
+              mail.warning                    -/var/log/mail.warn
+              mail.err                        /var/log/mail.err
+              cron.*                          /var/log/cron
+              *.=warning;*.=err               -/var/log/warn
+              *.crit                          /var/log/warn
+              *.*;mail.none;news.none         -/var/log/messages
+              local0,local1.*                 -/var/log/localmessages
+              local2,local3.*                 -/var/log/localmessages
+              local4,local5.*                 -/var/log/localmessages
+              local6,local7.*                 -/var/log/localmessages
+          notify: Restart rsyslog
+
+      tags:
+        - cis_4.2.1.5
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - logging
+        - manual
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.6 — Ensure rsyslog is configured to send logs to a remote log host (Manual)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.6 | L1 | Ensure rsyslog is configured to send logs to a remote log host"
+      block:
+        - name: "4.2.1.6 | AUDIT | Check current remote log host configuration"
+          ansible.builtin.shell: |
+            grep -E '^\s*([^#]+\s+)?action\(([^#]+\s+)?\btarget="?[^#"]+"?\b' \
+              /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || true
+          register: cis_4_2_1_6_remote_check
+          changed_when: false
+          check_mode: false
+
+        - name: "4.2.1.6 | AUDIT | Display remote log host configuration"
+          ansible.builtin.debug:
+            msg:
+              - "=== Configuración de host de log remoto ==="
+              - "{{ cis_4_2_1_6_remote_check.stdout_lines | default(['Sin configuración remota encontrada']) }}"
+              - "ACCIÓN REQUERIDA: Verificar que los logs se envíen al host centralizado."
+              - "Variable: cis_rsyslog_remote_host (actual: {{ cis_rsyslog_remote_host | default('NO DEFINIDA') }})"
+
+        - name: "4.2.1.6 | ROM | Configure rsyslog to forward to remote log host"
+          ansible.builtin.template:
+            dest: /etc/rsyslog.d/50-cis-remote.conf
+            owner: root
+            group: root
+            mode: "0640"
+            src: /dev/stdin
+            content: |
+              # CIS 4.2.1.6 - Remote log host configuration
+              *.* action(type="omfwd"
+                         target="{{ cis_rsyslog_remote_host }}"
+                         port="{{ cis_rsyslog_remote_port | default('514') }}"
+                         protocol="tcp"
+                         action.resumeRetryCount="100"
+                         queue.type="LinkedList"
+                         queue.size="1000")
+          when: cis_rsyslog_remote_host is defined
+          notify: Restart rsyslog
+
+        - name: "4.2.1.6 | WARN | Advertencia si cis_rsyslog_remote_host no está definido"
+          ansible.builtin.debug:
+            msg:
+              - "ADVERTENCIA: La variable 'cis_rsyslog_remote_host' no está definida."
+              - "Defínala en el inventario o en las variables del grupo/host para"
+              - "configurar el envío de logs al servidor centralizado."
+              - "Ejemplo: cis_rsyslog_remote_host: '192.168.2.100'"
+          when: cis_rsyslog_remote_host is not defined
+
+      tags:
+        - cis_4.2.1.6
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - logging
+        - manual
+
+    # -------------------------------------------------------------------------
+    # 4.2.1.7 — Ensure rsyslog is not configured to receive logs from a remote client (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.1.7 | L1 | Ensure rsyslog is not configured to receive logs from a remote client"
+      block:
+        - name: "4.2.1.7 | ROM | Remove $ModLoad imtcp (old format) from rsyslog.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/rsyslog.conf
+            regexp: '^\s*\$ModLoad\s+imtcp'
+            state: absent
+            backup: true
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Remove $InputTCPServerRun (old format) from rsyslog.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/rsyslog.conf
+            regexp: '^\s*\$InputTCPServerRun'
+            state: absent
+            backup: true
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Remove module(load=imtcp) (new format) from rsyslog configs"
+          ansible.builtin.replace:
+            path: "{{ item }}"
+            regexp: '^\s*module\s*\(\s*load\s*=\s*"imtcp"\s*\)'
+            replace: ""
+            backup: true
+          loop:
+            - /etc/rsyslog.conf
+          ignore_errors: true
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Remove input(type=imtcp port=514) (new format) from rsyslog configs"
+          ansible.builtin.replace:
+            path: "{{ item }}"
+            regexp: '^\s*input\s*\(\s*type\s*=\s*"imtcp".*\)'
+            replace: ""
+            backup: true
+          loop:
+            - /etc/rsyslog.conf
+          ignore_errors: true
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Find and clean imtcp from rsyslog.d drop-in files"
+          ansible.builtin.find:
+            paths: /etc/rsyslog.d/
+            patterns: "*.conf"
+          register: cis_4_2_1_7_rsyslog_d_files
+
+        - name: "4.2.1.7 | ROM | Remove $ModLoad imtcp from drop-in files (old format)"
+          ansible.builtin.lineinfile:
+            path: "{{ item.path }}"
+            regexp: '^\s*\$ModLoad\s+imtcp'
+            state: absent
+            backup: true
+          loop: "{{ cis_4_2_1_7_rsyslog_d_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Remove $InputTCPServerRun from drop-in files (old format)"
+          ansible.builtin.lineinfile:
+            path: "{{ item.path }}"
+            regexp: '^\s*\$InputTCPServerRun'
+            state: absent
+            backup: true
+          loop: "{{ cis_4_2_1_7_rsyslog_d_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Remove module(load=imtcp) from drop-in files (new format)"
+          ansible.builtin.replace:
+            path: "{{ item.path }}"
+            regexp: '^\s*module\s*\(\s*load\s*=\s*"imtcp"\s*\)'
+            replace: ""
+            backup: true
+          loop: "{{ cis_4_2_1_7_rsyslog_d_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+          ignore_errors: true
+          notify: Restart rsyslog
+
+        - name: "4.2.1.7 | ROM | Remove input(type=imtcp) from drop-in files (new format)"
+          ansible.builtin.replace:
+            path: "{{ item.path }}"
+            regexp: '^\s*input\s*\(\s*type\s*=\s*"imtcp".*\)'
+            replace: ""
+            backup: true
+          loop: "{{ cis_4_2_1_7_rsyslog_d_files.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+          ignore_errors: true
+          notify: Restart rsyslog
+
+      tags:
+        - cis_4.2.1.7
+        - level1_server
+        - level1_workstation
+        - rsyslog
+        - logging
+
+    # -------------------------------------------------------------------------
+    # 4.2.2.2 — Ensure journald service is enabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.2.2 | L1 | Ensure journald service is enabled"
+      block:
+        - name: "4.2.2.2 | AUDIT | Check systemd-journald service status"
+          ansible.builtin.command: systemctl is-enabled systemd-journald.service
+          register: cis_4_2_2_2_journald_status
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: "4.2.2.2 | AUDIT | Display journald service status"
+          ansible.builtin.debug:
+            msg:
+              - "=== Estado del servicio systemd-journald ==="
+              - "Estado actual: {{ cis_4_2_2_2_journald_status.stdout }}"
+              - "Estado esperado: static"
+              - "NOTA: systemd-journald no tiene sección [Install] y por diseño"
+              - "su estado es 'static'. Si el estado no es 'static', investigue la causa."
+
+        - name: "4.2.2.2 | WARN | Advertencia si journald no tiene estado 'static'"
+          ansible.builtin.debug:
+            msg:
+              - "ADVERTENCIA: systemd-journald.service tiene estado: {{ cis_4_2_2_2_journald_status.stdout }}"
+              - "Se esperaba 'static'. Investigue por qué el estado difiere del esperado."
+          when: cis_4_2_2_2_journald_status.stdout != 'static'
+
+      tags:
+        - cis_4.2.2.2
+        - level1_server
+        - level1_workstation
+        - journald
+        - logging
+
+    # -------------------------------------------------------------------------
+    # 4.2.2.3 — Ensure journald is configured to compress large log files (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.2.3 | L1 | Ensure journald is configured to compress large log files"
+      block:
+        - name: "4.2.2.3 | ROM | Set Compress=yes in journald.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/journald.conf
+            regexp: "^#?Compress="
+            line: "Compress=yes"
+            state: present
+            backup: true
+          notify: Restart systemd-journal-upload
+
+      tags:
+        - cis_4.2.2.3
+        - level1_server
+        - level1_workstation
+        - journald
+        - logging
+
+    # -------------------------------------------------------------------------
+    # 4.2.2.4 — Ensure journald is configured to write logfiles to persistent disk (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.2.4 | L1 | Ensure journald is configured to write logfiles to persistent disk"
+      block:
+        - name: "4.2.2.4 | ROM | Set Storage=persistent in journald.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/systemd/journald.conf
+            regexp: "^#?Storage="
+            line: "Storage=persistent"
+            state: present
+            backup: true
+          notify: Restart systemd-journal-upload
+
+      tags:
+        - cis_4.2.2.4
+        - level1_server
+        - level1_workstation
+        - journald
+        - logging
+
+    # -------------------------------------------------------------------------
+    # 4.2.3 — Ensure permissions on all logfiles are configured (Automated)
+    # -------------------------------------------------------------------------
+    - name: "4.2.3 | L1 | Ensure permissions on all logfiles are configured"
+      block:
+        - name: "4.2.3 | AUDIT | Find log files with excess permissions in /var/log/"
+          ansible.builtin.shell: |
+            find /var/log/ -type f -perm /g+wx,o+rwx -exec ls -l "{}" + 2>/dev/null || true
+          register: cis_4_2_3_log_perms
+          changed_when: false
+          check_mode: false
+
+        - name: "4.2.3 | AUDIT | Display log files with excess permissions"
+          ansible.builtin.debug:
+            msg:
+              - "=== Archivos de log con permisos excesivos ==="
+              - "{{ cis_4_2_3_log_perms.stdout_lines | default(['Ninguno encontrado']) }}"
+          when: cis_4_2_3_log_perms.stdout | length > 0
+
+        - name: "4.2.3 | ROM | Remove excess permissions from log files in /var/log/"
+          ansible.builtin.shell: |
+            find /var/log/ -type f -perm /g+wx,o+rwx -exec chmod --changes g-wx,o-rwx "{}" + 2>/dev/null || true
+          register: cis_4_2_3_fix
+          changed_when: cis_4_2_3_fix.stdout | length > 0
+
+      tags:
+        - cis_4.2.3
+        - level1_server
+        - level1_workstation
+        - logging
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.1.1 — Ensure cron daemon is enabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.1.1 | L1 | Ensure cron daemon is enabled"
+      block:
+        - name: "5.1.1 | ROM | Enable and start crond service"
+          ansible.builtin.systemd:
+            name: crond
+            enabled: true
+            state: started
+
+      tags:
+        - cis_5.1.1
+        - level1_server
+        - level1_workstation
+        - cron
+
+    # -------------------------------------------------------------------------
+    # 5.1.2–5.1.7 — Ensure permissions on crontab and cron directories (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.1.2 | L1 | Ensure permissions on /etc/crontab are configured"
+      block:
+        - name: "5.1.2 | ROM | Set ownership and permissions on /etc/crontab"
+          ansible.builtin.file:
+            path: /etc/crontab
+            owner: root
+            group: root
+            mode: "0600"
+            state: file
+
+      tags:
+        - cis_5.1.2
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    - name: "5.1.3 | L1 | Ensure permissions on /etc/cron.hourly are configured"
+      block:
+        - name: "5.1.3 | ROM | Set ownership and permissions on /etc/cron.hourly"
+          ansible.builtin.file:
+            path: /etc/cron.hourly
+            owner: root
+            group: root
+            mode: "0700"
+            state: directory
+
+      tags:
+        - cis_5.1.3
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    - name: "5.1.4 | L1 | Ensure permissions on /etc/cron.daily are configured"
+      block:
+        - name: "5.1.4 | ROM | Set ownership and permissions on /etc/cron.daily"
+          ansible.builtin.file:
+            path: /etc/cron.daily
+            owner: root
+            group: root
+            mode: "0700"
+            state: directory
+
+      tags:
+        - cis_5.1.4
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    - name: "5.1.5 | L1 | Ensure permissions on /etc/cron.weekly are configured"
+      block:
+        - name: "5.1.5 | ROM | Set ownership and permissions on /etc/cron.weekly"
+          ansible.builtin.file:
+            path: /etc/cron.weekly
+            owner: root
+            group: root
+            mode: "0700"
+            state: directory
+
+      tags:
+        - cis_5.1.5
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    - name: "5.1.6 | L1 | Ensure permissions on /etc/cron.monthly are configured"
+      block:
+        - name: "5.1.6 | ROM | Set ownership and permissions on /etc/cron.monthly"
+          ansible.builtin.file:
+            path: /etc/cron.monthly
+            owner: root
+            group: root
+            mode: "0700"
+            state: directory
+
+      tags:
+        - cis_5.1.6
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    - name: "5.1.7 | L1 | Ensure permissions on /etc/cron.d are configured"
+      block:
+        - name: "5.1.7 | ROM | Set ownership and permissions on /etc/cron.d"
+          ansible.builtin.file:
+            path: /etc/cron.d
+            owner: root
+            group: root
+            mode: "0700"
+            state: directory
+
+      tags:
+        - cis_5.1.7
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.1.8 — Ensure cron is restricted to authorized users (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.1.8 | L1 | Ensure cron is restricted to authorized users"
+      block:
+        - name: "5.1.8 | AUDIT | Check if cronie is installed"
+          ansible.builtin.command: rpm -q cronie
+          register: cis_5_1_8_cronie_installed
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: "5.1.8 | ROM | Remove /etc/cron.deny"
+          ansible.builtin.file:
+            path: /etc/cron.deny
+            state: absent
+          when: cis_5_1_8_cronie_installed.rc == 0
+
+        - name: "5.1.8 | ROM | Create /etc/cron.allow with root:root 0600"
+          ansible.builtin.file:
+            path: /etc/cron.allow
+            state: touch
+            owner: root
+            group: root
+            mode: "0600"
+            modification_time: preserve
+            access_time: preserve
+          when: cis_5_1_8_cronie_installed.rc == 0
+
+      tags:
+        - cis_5.1.8
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.1.9 — Ensure at is restricted to authorized users (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.1.9 | L1 | Ensure at is restricted to authorized users"
+      block:
+        - name: "5.1.9 | AUDIT | Check if at is installed"
+          ansible.builtin.command: rpm -q at
+          register: cis_5_1_9_at_installed
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: "5.1.9 | ROM | Remove /etc/at.deny"
+          ansible.builtin.file:
+            path: /etc/at.deny
+            state: absent
+          when: cis_5_1_9_at_installed.rc == 0
+
+        - name: "5.1.9 | ROM | Create /etc/at.allow with root:root 0600"
+          ansible.builtin.file:
+            path: /etc/at.allow
+            state: touch
+            owner: root
+            group: root
+            mode: "0600"
+            modification_time: preserve
+            access_time: preserve
+          when: cis_5_1_9_at_installed.rc == 0
+
+      tags:
+        - cis_5.1.9
+        - level1_server
+        - level1_workstation
+        - cron
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.2.1 — Ensure permissions on /etc/ssh/sshd_config are configured (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.1 | L1 | Ensure permissions on /etc/ssh/sshd_config are configured"
+      block:
+        - name: "5.2.1 | ROM | Set ownership and permissions on /etc/ssh/sshd_config"
+          ansible.builtin.file:
+            path: /etc/ssh/sshd_config
+            owner: root
+            group: root
+            mode: "0600"
+            state: file
+
+      tags:
+        - cis_5.2.1
+        - level1_server
+        - level1_workstation
+        - ssh
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.2.2 — Ensure permissions on SSH private host key files are configured (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.2 | L1 | Ensure permissions on SSH private host key files are configured"
+      block:
+        - name: "5.2.2 | AUDIT | Find SSH private host key files"
+          ansible.builtin.find:
+            paths: /etc/ssh
+            patterns: "ssh_host_*_key"
+            file_type: file
+          register: cis_5_2_2_private_keys
+
+        - name: "5.2.2 | ROM | Set root:root 0600 on SSH private host keys"
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            owner: root
+            group: root
+            mode: "0600"
+          loop: "{{ cis_5_2_2_private_keys.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+      tags:
+        - cis_5.2.2
+        - level1_server
+        - level1_workstation
+        - ssh
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.2.3 — Ensure permissions on SSH public host key files are configured (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.3 | L1 | Ensure permissions on SSH public host key files are configured"
+      block:
+        - name: "5.2.3 | AUDIT | Find SSH public host key files"
+          ansible.builtin.find:
+            paths: /etc/ssh
+            patterns: "ssh_host_*_key.pub"
+            file_type: file
+          register: cis_5_2_3_public_keys
+
+        - name: "5.2.3 | ROM | Set root:root 0644 on SSH public host keys"
+          ansible.builtin.file:
+            path: "{{ item.path }}"
+            owner: root
+            group: root
+            mode: "0644"
+          loop: "{{ cis_5_2_3_public_keys.files }}"
+          loop_control:
+            label: "{{ item.path }}"
+
+      tags:
+        - cis_5.2.3
+        - level1_server
+        - level1_workstation
+        - ssh
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 5.2.6 — Ensure SSH PAM is enabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.6 | L1 | Ensure SSH PAM is enabled"
+      block:
+        - name: "5.2.6 | ROM | Set UsePAM yes in sshd_config"
+          ansible.builtin.lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^\s*UsePAM\s+'
+            line: "UsePAM yes"
+            state: present
+            backup: true
+          notify: Reload sshd
+
+      tags:
+        - cis_5.2.6
+        - level1_server
+        - level1_workstation
+        - ssh
+
+    # -------------------------------------------------------------------------
+    # 5.2.7 — Ensure SSH root login is disabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.7 | L1 | Ensure SSH root login is disabled"
+      block:
+        - name: "5.2.7 | ROM | Set PermitRootLogin no in sshd_config"
+          ansible.builtin.lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^\s*PermitRootLogin\s+'
+            line: "PermitRootLogin no"
+            state: present
+            backup: true
+          notify: Reload sshd
+
+      tags:
+        - cis_5.2.7
+        - level1_server
+        - level1_workstation
+        - ssh
+
+    # -------------------------------------------------------------------------
+    # 5.2.8 — Ensure SSH HostbasedAuthentication is disabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.8 | L1 | Ensure SSH HostbasedAuthentication is disabled"
+      block:
+        - name: "5.2.8 | ROM | Set HostbasedAuthentication no in sshd_config"
+          ansible.builtin.lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^\s*HostbasedAuthentication\s+'
+            line: "HostbasedAuthentication no"
+            state: present
+            backup: true
+          notify: Reload sshd
+
+      tags:
+        - cis_5.2.8
+        - level1_server
+        - level1_workstation
+        - ssh
+
+    # -------------------------------------------------------------------------
+    # 5.2.11 — Ensure SSH IgnoreRhosts is enabled (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.2.11 | L1 | Ensure SSH IgnoreRhosts is enabled"
+      block:
+        - name: "5.2.11 | ROM | Set IgnoreRhosts yes in sshd_config"
+          ansible.builtin.lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^\s*IgnoreRhosts\s+'
+            line: "IgnoreRhosts yes"
+            state: present
+            backup: true
+          notify: Reload sshd
+
+      tags:
+        - cis_5.2.11
+        - level1_server
+        - level1_workstation
+        - ssh
+
+    # -------------------------------------------------------------------------
+    # 5.2.12 — Ensure SSH X11 forwarding is disabled (Automated)
+    # Level 1 - Workstation / Level 2 - Server
+    # -------------------------------------------------------------------------
+    - name: "5.2.12 | L1W/L2S | Ensure SSH X11 forwarding is disabled"
+      block:
+        - name: "5.2.12 | ROM | Set X11Forwarding no in sshd_config"
+          ansible.builtin.lineinfile:
+            path: /etc/ssh/sshd_config
+            regexp: '^\s*X11Forwarding\s+'
+            line: "X11Forwarding no"
+            state: present
+            backup: true
+          notify: Reload sshd
+
+      tags:
+        - cis_5.2.12
+        - level1_workstation
+        - level2_server
+        - ssh
+
+    # -------------------------------------------------------------------------
+    # 5.4.2 — Ensure authselect includes with-faillock (Automated)
+    # -------------------------------------------------------------------------
+    - name: "5.4.2 | L1 | Ensure authselect includes with-faillock"
+      block:
+        - name: "5.4.2 | AUDIT | Check if 'with-faillock' is in the current authselect profile"
+          ansible.builtin.command: authselect current
+          register: authselect_current
+          changed_when: false
+          check_mode: false
+
+        - name: "5.4.2 | ROM | Enable 'with-faillock' feature if not present"
+          ansible.builtin.command: authselect enable-feature with-faillock
+          when: "'with-faillock' not in authselect_current.stdout"
+          register: faillock_enable_result
+          changed_when: faillock_enable_result.rc == 0
+
+        - name: "5.4.2 | ROM | Apply authselect changes if feature was enabled"
+          ansible.builtin.command: authselect apply-changes -b
+          when: faillock_enable_result.changed
+          changed_when: true
+
+      tags:
+        - cis_5.4.2
+        - level1_server
+        - level1_workstation
+        - authselect
+        - faillock
+
+    # -------------------------------------------------------------------------
+    # 5.5.4 — Ensure password hashing algorithm is SHA-512
+    # -------------------------------------------------------------------------
+    - name: "5.5.4 | L1 | Ensure password hashing algorithm is SHA-512"
+      block:
+        - name: "5.5.4 | ROM | Set crypt_style to sha512 in /etc/libuser.conf"
+          ansible.builtin.lineinfile:
+            path: /etc/libuser.conf
+            regexp: '^\s*crypt_style\s*='
+            line: "crypt_style = sha512"
+            state: present
+            create: true
+            owner: root
+            group: root
+            mode: "0644"
+          failed_when: false
+
+        - name: "5.5.4 | ROM | Set ENCRYPT_METHOD to SHA512 in /etc/login.defs"
+          ansible.builtin.lineinfile:
+            path: /etc/login.defs
+            regexp: '^\s*ENCRYPT_METHOD\s+'
+            line: "ENCRYPT_METHOD SHA512"
+            state: present
+            backup: true
+
+        - name: "5.5.4 | ROM | Get current authselect profile name"
+          ansible.builtin.shell: "authselect current | grep 'Profile ID' | awk '{print $3}'"
+          register: authselect_profile_name
+          changed_when: false
+          check_mode: false
+
+        - name: "5.5.4 | ROM | Replace weak hashing algorithms with sha512 in custom authselect profile"
+          ansible.builtin.replace:
+            path: "/etc/authselect/{{ authselect_profile_name.stdout }}/{{ item }}"
+            regexp: '(\s+(?:md5|blowfish|bigcrypt|sha256)\b)'
+            replace: " sha512"
+          loop:
+            - "password-auth"
+            - "system-auth"
+          when: "'custom' in authselect_profile_name.stdout"
+          notify: Apply authselect changes
+
+        - name: "5.5.4 | ROM | Add sha512 to pam_unix if no algorithm is specified in custom profile"
+          ansible.builtin.lineinfile:
+            path: "/etc/authselect/{{ authselect_profile_name.stdout }}/{{ item }}"
+            regexp: '^(password\s+(?:sufficient|required|requisite)\s+pam_unix\.so\s+(?!.*\b(?:sha512|md5|blowfish|bigcrypt|sha256)\b).*)$'
+            line: '\1 sha512'
+            backrefs: true
+          loop:
+            - "password-auth"
+            - "system-auth"
+          when: "'custom' in authselect_profile_name.stdout"
+          notify: Apply authselect changes
+
+      tags:
+        - cis_5.5.4
+        - level1_server
+        - level1_workstation
+        - password_policy
+
+    # -------------------------------------------------------------------------
+    # 5.6.1 — Password Expiration Settings
+    # -------------------------------------------------------------------------
+    - name: "5.6.1 | L1 | Password Expiration Settings"
+      block:
+        - name: "5.6.1 | ROM | Get list of users with passwords"
+          ansible.builtin.shell: 'awk -F: ''($2 != "!" && $2 != "*") {print $1}'' /etc/shadow'
+          register: users_with_passwords
+          changed_when: false
+          check_mode: false
+
+        - name: "5.6.1.1 | ROM | Set PASS_MAX_DAYS to 365 in /etc/login.defs"
+          ansible.builtin.lineinfile:
+            path: /etc/login.defs
+            regexp: '^\s*PASS_MAX_DAYS\s+'
+            line: "PASS_MAX_DAYS   365"
+            state: present
+            backup: true
+
+        - name: "5.6.1.1 | ROM | Set maxdays to 365 for existing users"
+          ansible.builtin.command: "chage --maxdays 365 {{ item }}"
+          loop: "{{ users_with_passwords.stdout_lines }}"
+          when: users_with_passwords.stdout_lines | length > 0
+
+        - name: "5.6.1.2 | ROM | Set PASS_MIN_DAYS to 7 in /etc/login.defs"
+          ansible.builtin.lineinfile:
+            path: /etc/login.defs
+            regexp: '^\s*PASS_MIN_DAYS\s+'
+            line: "PASS_MIN_DAYS   7"
+            state: present
+            backup: true
+
+        - name: "5.6.1.2 | ROM | Set mindays to 7 for existing users"
+          ansible.builtin.command: "chage --mindays 7 {{ item }}"
+          loop: "{{ users_with_passwords.stdout_lines }}"
+          when: users_with_passwords.stdout_lines | length > 0
+
+        - name: "5.6.1.3 | ROM | Set PASS_WARN_AGE to 7 in /etc/login.defs"
+          ansible.builtin.lineinfile:
+            path: /etc/login.defs
+            regexp: '^\s*PASS_WARN_AGE\s+'
+            line: "PASS_WARN_AGE   7"
+            state: present
+            backup: true
+
+        - name: "5.6.1.3 | ROM | Set warndays to 7 for existing users"
+          ansible.builtin.command: "chage --warndays 7 {{ item }}"
+          loop: "{{ users_with_passwords.stdout_lines }}"
+          when: users_with_passwords.stdout_lines | length > 0
+
+      tags:
+        - cis_5.6.1
+        - cis_5.6.1.1
+        - cis_5.6.1.2
+        - cis_5.6.1.3
+        - level1_server
+        - level1_workstation
+        - password_policy
+
+    # -------------------------------------------------------------------------
+    # 6.1 — System File Permissions
+    # -------------------------------------------------------------------------
+    - name: "6.1.3 | L1 | Ensure permissions on /etc/passwd are configured"
+      ansible.builtin.file:
+        path: /etc/passwd
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_6.1.3
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.4 | L1 | Ensure permissions on /etc/shadow are configured"
+      ansible.builtin.file:
+        path: /etc/shadow
+        owner: root
+        group: root
+        mode: "0000"
+      tags:
+        - cis_6.1.4
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.5 | L1 | Ensure permissions on /etc/group are configured"
+      ansible.builtin.file:
+        path: /etc/group
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_6.1.5
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.6 | L1 | Ensure permissions on /etc/gshadow are configured"
+      ansible.builtin.file:
+        path: /etc/gshadow
+        owner: root
+        group: root
+        mode: "0000"
+      tags:
+        - cis_6.1.6
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.7 | L1 | Ensure permissions on /etc/passwd- are configured"
+      ansible.builtin.file:
+        path: /etc/passwd-
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_6.1.7
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.8 | L1 | Ensure permissions on /etc/shadow- are configured"
+      ansible.builtin.file:
+        path: /etc/shadow-
+        owner: root
+        group: root
+        mode: "0000"
+      tags:
+        - cis_6.1.8
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.9 | L1 | Ensure permissions on /etc/group- are configured"
+      ansible.builtin.file:
+        path: /etc/group-
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_6.1.9
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.10 | L1 | Ensure permissions on /etc/gshadow- are configured"
+      ansible.builtin.file:
+        path: /etc/gshadow-
+        owner: root
+        group: root
+        mode: "0000"
+      tags:
+        - cis_6.1.10
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    - name: "6.1.11 | L1 | Ensure no world writable files exist"
+      block:
+        - name: "6.1.11 | AUDIT | Find world writable files"
+          ansible.builtin.shell: |
+            df --local -P | awk '{if (NR!=1) print $6}' | xargs -I '{}' find '{}' -xdev -type f -perm -0002
+          register: world_writable_files
+          changed_when: false
+          check_mode: false
+
+        - name: "6.1.11 | ROM | Remove world writable permission"
+          ansible.builtin.file:
+            path: "{{ item }}"
+            mode: "o-w"
+          loop: "{{ world_writable_files.stdout_lines }}"
+          when: world_writable_files.stdout_lines | length > 0
+
+      tags:
+        - cis_6.1.11
+        - level1_server
+        - level1_workstation
+        - permissions
+
+    # -------------------------------------------------------------------------
+    # 6.2.3 — Ensure no duplicate UIDs exist
+    # -------------------------------------------------------------------------
+    - name: "6.2.3 | L1 | AUDIT | Ensure no duplicate UIDs exist"
+      block:
+        - name: "6.2.3 | AUDIT | Check for duplicate UIDs"
+          ansible.builtin.shell: |
+            cut -f3 -d":" /etc/passwd | sort -n | uniq -c | while read x ; do
+              [ -z "$x" ] && break
+              set - $x
+              if [ $1 -gt 1 ]; then
+                users=$(awk -F: '($3 == n) { print $1 }' n=$2 /etc/passwd | xargs)
+                echo "Duplicate UID ($2): $users"
+              fi
+            done
+          register: duplicate_uids
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.3 | AUDIT | Fail if duplicate UIDs are found"
+          ansible.builtin.fail:
+            msg: "Duplicate UIDs found. Manual remediation required: {{ duplicate_uids.stdout_lines }}"
+          when: duplicate_uids.stdout != ""
+
+      tags:
+        - cis_6.2.3
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.4 — Ensure no duplicate GIDs exist
+    # -------------------------------------------------------------------------
+    - name: "6.2.4 | L1 | AUDIT | Ensure no duplicate GIDs exist"
+      block:
+        - name: "6.2.4 | AUDIT | Check for duplicate GIDs"
+          ansible.builtin.shell: |
+            cut -d: -f3 /etc/group | sort | uniq -d | while read x ; do
+              echo "Duplicate GID ($x) in /etc/group"
+            done
+          register: duplicate_gids
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.4 | AUDIT | Fail if duplicate GIDs are found"
+          ansible.builtin.fail:
+            msg: "Duplicate GIDs found. Manual remediation required: {{ duplicate_gids.stdout_lines }}"
+          when: duplicate_gids.stdout != ""
+
+      tags:
+        - cis_6.2.4
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.5 — Ensure no duplicate user names exist
+    # -------------------------------------------------------------------------
+    - name: "6.2.5 | L1 | AUDIT | Ensure no duplicate user names exist"
+      block:
+        - name: "6.2.5 | AUDIT | Check for duplicate user names"
+          ansible.builtin.shell: |
+            cut -d: -f1 /etc/passwd | sort | uniq -d | while read x; do
+              echo "Duplicate login name ${x} in /etc/passwd"
+            done
+          register: duplicate_user_names
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.5 | AUDIT | Fail if duplicate user names are found"
+          ansible.builtin.fail:
+            msg: "Duplicate user names found. Manual remediation required: {{ duplicate_user_names.stdout_lines }}"
+          when: duplicate_user_names.stdout != ""
+
+      tags:
+        - cis_6.2.5
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.6 — Ensure no duplicate group names exist
+    # -------------------------------------------------------------------------
+    - name: "6.2.6 | L1 | AUDIT | Ensure no duplicate group names exist"
+      block:
+        - name: "6.2.6 | AUDIT | Check for duplicate group names"
+          ansible.builtin.shell: |
+            cut -d: -f1 /etc/group | sort | uniq -d | while read -r x; do
+              echo "Duplicate group name ${x} in /etc/group"
+            done
+          register: duplicate_group_names
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.6 | AUDIT | Fail if duplicate group names are found"
+          ansible.builtin.fail:
+            msg: "Duplicate group names found. Manual remediation required: {{ duplicate_group_names.stdout_lines }}"
+          when: duplicate_group_names.stdout != ""
+
+      tags:
+        - cis_6.2.6
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.7 — Ensure root PATH Integrity
+    # -------------------------------------------------------------------------
+    - name: "6.2.7 | L1 | AUDIT | Ensure root PATH Integrity"
+      block:
+        - name: "6.2.7 | AUDIT | Check root PATH for insecurities"
+          ansible.builtin.shell: |
+            RPCV="$(sudo -Hiu root env | grep '^PATH=' | cut -d= -f2)"
+            issues=""
+            if echo "$RPCV" | grep -q "::"; then issues+="root's path contains an empty directory (::). "; fi
+            if echo "$RPCV" | grep -q ":$"; then issues+="root's path contains a trailing colon. "; fi
+            for x in $(echo "$RPCV" | tr ":" " "); do
+              if [ -d "$x" ]; then
+                if [ "$x" = "." ]; then issues+="PATH contains current working directory (.). "; fi
+                dir_info=$(ls -ldH "$x"); owner=$(echo "$dir_info" | awk '{print $3}'); perms=$(echo "$dir_info" | awk '{print $1}');
+                if [ "$owner" != "root" ]; then issues+="Directory $x is not owned by root. "; fi
+                if [ "${perms:5:1}" != "-" ]; then issues+="Directory $x is group writable. "; fi
+                if [ "${perms:8:1}" != "-" ]; then issues+="Directory $x is world writable. "; fi
+              else
+                issues+="Directory $x is not a directory. ";
+              fi
+            done
+            if [ -n "$issues" ]; then echo "$issues"; exit 1; else exit 0; fi
+          register: root_path_audit
+          changed_when: false
+          failed_when: false
+          check_mode: false
+
+        - name: "6.2.7 | AUDIT | Fail if root PATH has integrity issues"
+          ansible.builtin.fail:
+            msg: "Root PATH integrity issues found. Manual remediation required: {{ root_path_audit.stdout }}"
+          when: root_path_audit.rc != 0
+
+      tags:
+        - cis_6.2.7
+        - level1_server
+        - level1_workstation
+        - accounts
+        - path
+
+    # -------------------------------------------------------------------------
+    # 6.2.8 — Ensure root is the only UID 0 account
+    # -------------------------------------------------------------------------
+    - name: "6.2.8 | L1 | AUDIT | Ensure root is the only UID 0 account"
+      block:
+        - name: "6.2.8 | AUDIT | Check for non-root UID 0 accounts"
+          ansible.builtin.shell: |
+            awk -F: '($3 == 0) { print $1 }' /etc/passwd | grep -v '^root$'
+          register: cis_6_2_8_uid_zero
+          changed_when: false
+          failed_when: cis_6_2_8_uid_zero.stdout | length > 0
+          check_mode: false
+
+      tags:
+        - cis_6.2.8
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.10 — Ensure users own their home directories
+    # -------------------------------------------------------------------------
+    - name: "6.2.10 | L1 | Ensure users own their home directories"
+      block:
+        - name: "6.2.10 | AUDIT | Check home directory ownership"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $1":"$6}' /etc/passwd | while read -r userhome; do
+              user=$(echo "$userhome" | cut -d: -f1)
+              dir=$(echo "$userhome" | cut -d: -f2)
+              if [ -d "$dir" ]; then
+                owner=$(stat -L -c "%U" "$dir")
+                if [ "$owner" != "$user" ]; then
+                  echo "User $user does not own $dir (owned by $owner)"
+                fi
+              fi
+            done
+          register: cis_6_2_10_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.10 | ROM | Fix home directory ownership"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $1":"$6}' /etc/passwd | while read -r userhome; do
+              user=$(echo "$userhome" | cut -d: -f1)
+              dir=$(echo "$userhome" | cut -d: -f2)
+              if [ -d "$dir" ]; then
+                owner=$(stat -L -c "%U" "$dir")
+                if [ "$owner" != "$user" ]; then
+                  chown "$user" "$dir"
+                fi
+              fi
+            done
+          when: cis_6_2_10_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.10
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.11 — Ensure users' home directories permissions are 750 or more restrictive
+    # -------------------------------------------------------------------------
+    - name: "6.2.11 | L1 | Ensure users' home directories permissions are 750 or more restrictive"
+      block:
+        - name: "6.2.11 | AUDIT | Check home directory permissions"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                dirperm=$(stat -L -c "%A" "$dir")
+                if [ "$(echo "$dirperm" | cut -c6)" != "-" ] || [ "$(echo "$dirperm" | cut -c8)" != "-" ] || [ "$(echo "$dirperm" | cut -c9)" != "-" ] || [ "$(echo "$dirperm" | cut -c10)" != "-" ]; then
+                  echo "Perms too loose on $dir"
+                fi
+              fi
+            done
+          register: cis_6_2_11_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.11 | ROM | Fix home directory permissions"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                dirperm=$(stat -L -c "%A" "$dir")
+                if [ "$(echo "$dirperm" | cut -c6)" != "-" ] || [ "$(echo "$dirperm" | cut -c8)" != "-" ] || [ "$(echo "$dirperm" | cut -c9)" != "-" ] || [ "$(echo "$dirperm" | cut -c10)" != "-" ]; then
+                  chmod g-w,o-rwx "$dir"
+                fi
+              fi
+            done
+          when: cis_6_2_11_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.11
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.12 — Ensure users' dot files are not group or world writable
+    # -------------------------------------------------------------------------
+    - name: "6.2.12 | L1 | Ensure users' dot files are not group or world writable"
+      block:
+        - name: "6.2.12 | AUDIT | Check dot file permissions"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                for file in "$dir"/.*; do
+                  if [ ! -h "$file" ] && [ -f "$file" ]; then
+                    fileperm=$(stat -L -c "%A" "$file")
+                    if [ "$(echo "$fileperm" | cut -c6)" != "-" ] || [ "$(echo "$fileperm" | cut -c9)" != "-" ]; then
+                      echo "Dot file $file has loose permissions"
+                    fi
+                  fi
+                done
+              fi
+            done
+          register: cis_6_2_12_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.12 | ROM | Fix dot file permissions"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                for file in "$dir"/.*; do
+                  if [ ! -h "$file" ] && [ -f "$file" ]; then
+                    fileperm=$(stat -L -c "%A" "$file")
+                    if [ "$(echo "$fileperm" | cut -c6)" != "-" ] || [ "$(echo "$fileperm" | cut -c9)" != "-" ]; then
+                      chmod go-w "$file"
+                    fi
+                  fi
+                done
+              fi
+            done
+          when: cis_6_2_12_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.12
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.13 — Ensure users' .netrc Files are not group or world accessible
+    # -------------------------------------------------------------------------
+    - name: "6.2.13 | L1 | Ensure users' .netrc Files are not group or world accessible"
+      block:
+        - name: "6.2.13 | AUDIT | Check .netrc permissions"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.netrc"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  if stat -L -c "%A" "$file" | cut -c4-10 | grep -Eq '[^-]+'; then
+                    echo "FAILED: $file permissions too open"
+                  fi
+                fi
+              fi
+            done
+          register: cis_6_2_13_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.13 | ROM | Fix .netrc permissions"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.netrc"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  if stat -L -c "%A" "$file" | cut -c4-10 | grep -Eq '[^-]+'; then
+                    chmod 600 "$file"
+                  fi
+                fi
+              fi
+            done
+          when: cis_6_2_13_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.13
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.14 — Ensure no users have .forward files
+    # -------------------------------------------------------------------------
+    - name: "6.2.14 | L1 | Ensure no users have .forward files"
+      block:
+        - name: "6.2.14 | AUDIT | Check for .forward files"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.forward"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  echo "Found $file"
+                fi
+              fi
+            done
+          register: cis_6_2_14_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.14 | ROM | Remove .forward files"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.forward"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  rm -f "$file"
+                fi
+              fi
+            done
+          when: cis_6_2_14_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.14
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.15 — Ensure no users have .netrc files
+    # -------------------------------------------------------------------------
+    - name: "6.2.15 | L1 | Ensure no users have .netrc files"
+      block:
+        - name: "6.2.15 | AUDIT | Check for .netrc files"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.netrc"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  echo "Found $file"
+                fi
+              fi
+            done
+          register: cis_6_2_15_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.15 | ROM | Remove .netrc files"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) {print $6}' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.netrc"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  rm -f "$file"
+                fi
+              fi
+            done
+          when: cis_6_2_15_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.15
+        - level1_server
+        - level1_workstation
+        - accounts
+
+    # -------------------------------------------------------------------------
+    # 6.2.16 — Ensure no users have .rhosts files
+    # -------------------------------------------------------------------------
+    - name: "6.2.16 | L1 | Ensure no users have .rhosts files"
+      block:
+        - name: "6.2.16 | AUDIT | Check for .rhosts files"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) { print $6 }' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.rhosts"
+                if [ ! -h "$file" ] && [ -f "$file" ]; then
+                  echo "Found $file"
+                fi
+              fi
+            done
+          register: cis_6_2_16_audit
+          changed_when: false
+          check_mode: false
+
+        - name: "6.2.16 | ROM | Remove .rhosts files"
+          ansible.builtin.shell: |
+            awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ && $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ && $7!~/(\/usr)?\/bin\/false(\/)?$/) { print $6 }' /etc/passwd | while read -r dir; do
+              if [ -d "$dir" ]; then
+                file="$dir/.rhosts"
+                [ ! -h "$file" ] && [ -f "$file" ] && rm -f "$file"
+              fi
+            done
+          when: cis_6_2_16_audit.stdout | length > 0
+
+      tags:
+        - cis_6.2.16
+        - level1_server
+        - level1_workstation
+        - accounts
+
+  handlers:
+    - name: Reload systemd daemon
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Update crypto policies
+      ansible.builtin.command: update-crypto-policies
+
+    - name: Apply authselect changes
+      ansible.builtin.command: authselect apply-changes -b
+      notify: Reload sshd
+
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+
+    - name: Restart systemd-journal-upload
+      ansible.builtin.systemd:
+        name: systemd-journal-upload
+        state: restarted
+      failed_when: false
+
+    - name: Reload sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded

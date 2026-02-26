@@ -4,11 +4,10 @@
 #
 # Level 1 - Server y Workstation
 
-
 - name: Deshabilitar filesystems innecesarios (cramfs, freevxfs, jffs2, hfs, hfsplus, squashfs, udf, USB storage)
   hosts: all
   become: yes
-  
+
   vars:
     filesystems_to_disable:
       - cramfs
@@ -34,16 +33,14 @@
     cis_6_2_10_remediate: false
     cis_6_2_11_remediate: false
 
-
   tasks:
     - name: Crear directorio /etc/modprobe.d si no existe
       file:
         path: /etc/modprobe.d
         state: directory
-        mode: '0755'
+        mode: "0755"
         owner: root
         group: root
-
 
     - name: Crear archivos de configuracion para deshabilitar filesystems
       copy:
@@ -53,10 +50,9 @@
           install {{ item }} /bin/true
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       loop: "{{ filesystems_to_disable }}"
       register: fs_config
-
 
     - name: Verificar si los modulos estan cargados
       shell: "lsmod | grep -w {{ item }}"
@@ -64,7 +60,6 @@
       register: fs_loaded
       failed_when: false
       changed_when: false
-
 
     - name: Descargar modulos que estan cargados
       modprobe:
@@ -74,21 +69,18 @@
       when: item.stdout != ""
       ignore_errors: yes
 
-
     - name: Verificar que los modulos no se pueden cargar
       command: "modprobe -n -v {{ item }}"
       loop: "{{ filesystems_to_disable }}"
       register: fs_check
       changed_when: false
 
-
     - name: Mostrar resultados de verificacion
       debug:
-        msg: 
+        msg:
           - "Filesystem: {{ item.item }}"
           - "Estado: {{ item.stdout }}"
       loop: "{{ fs_check.results }}"
-
 
     - name: Verificacion final - Confirmar que los modulos no estan en lsmod
       shell: "lsmod | grep -w {{ item }}"
@@ -96,7 +88,7 @@
       register: final_check
       failed_when: final_check.stdout != ""
       changed_when: false
-    
+
     - name: Crear archivo de configuracion para deshabilitar USB storage
       copy:
         dest: /etc/modprobe.d/usb_storage.conf
@@ -104,80 +96,73 @@
           # Deshabilitar USB storage segun la CIS Benchmark 1.1.23
           install usb-storage /bin/true
         owner: root
-      group: root 
-      mode: '0644'
-    
-    - name: Verificar si el modulo usb-storage esta cargando 
+        group: root
+        mode: "0644"
+
+    - name: Verificar si el modulo usb-storage esta cargando
       shell: "lsmod | grep -w usb-storage"
       register: usb_loaded
       failed_when: false
       changed_when: false
-    
+
     - name: Descargar modulo usb-storage si esta cargando
       modprobe:
         name: usb-storage
         state: absent
-      when: usb_loaded.item.stdout != ""
+      when: usb_loaded.stdout != ""
       ignore_errors: yes
 
-
-   - name: Verificar que usb-storage no se puede cargar
+    - name: Verificar que usb-storage no se puede cargar
       command: "modprobe -n -v usb-storage"
       register: usb_check
       changed_when: false
-
 
     - name: Mostrar resultados de verificacion de USB storage
       debug:
         msg:
           - "Modulo: usb-storage"
           - "Estado esperado: install /bin/true"
-          - "Salida real {{ usb_check.item.stdout }}"
-
+          - "Salida real {{ usb_check.stdout }}"
 
     - name: Verificacion final - confirmar que usb-storage no esta en lsmod
       shell: "lsmod | grep -w usb-storage"
       register: usb_final_check
-      failed_when: usb_final_check.item.stdout != ""
+      failed_when: usb_final_check.stdout != ""
       changed_when: false
-    
+
     - name: CIS 1.5.3 - Comentar configuraciones incorrectas de ASLR en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*kernel\.randomize_va_space\s*=\s*([0-1]|[3-9]|[1-9][0-9]+)'
         replace: '# \g<0>'
-      register: sysctl_conf_aslr 
-    
+      register: sysctl_conf_aslr
+
     - name: CIS 1.5.3 - Comentar la configuracio incorrectas de ASLR en /etc/sysctl.d/*
       replace:
         path: "{{ item.path }}"
         regexp: '^\s*kernel\.randomize_va_space\s*=\s*([0-1]|[3-9]|[1-9][0-9]+)'
         replace: '# \g<0>'
-        loop: "{{ sysctl_d_files.files  }}"
-        when: sysctl_d_files.matched > 0
-        register: sysctl_d_aslr
-
+      loop: "{{ sysctl_d_files.files }}"
+      when: sysctl_d_files.matched > 0
+      register: sysctl_d_aslr
 
     - name: CIS 1.5.3 - Configurar ASLR en /etc/sysctl.d/99-cis-aslr.conf
       sysctl:
         name: kernel.randomize_va_space
-        value: '2'
+        value: "2"
         sysctl_file: /etc/sysctl.d/99-cis-aslr.conf
         state: present
         reload: yes
       register: aslr_config
 
-
     - name: CIS 1.5.3 - Aplicar configuracion de ASLR inmediatamente
       command: sysctl -w kernel.randomize_va_space=2
       when: aslr_config.changed
-
 
     - name: CIS 1.5.3 - Verificar configuracion actual de ASLR
       command: sysctl kernel.randomize_va_space
       register: aslr_current
       changed_when: false
-
 
     - name: CIS 1.5.3 - Verificar que no existan configuraciones incorrectas de ASLR
       shell: |
@@ -185,13 +170,11 @@
       register: aslr_incorrect
       changed_when: false
 
-
     - name: CIS 1.5.3 - Mostrar resultado de verificacion de ASLR
       debug:
         msg:
           - "Valor actual de ASLR: {{ aslr_current.stdout }}"
           - "Configuraciones incorrectas encontradas: {{ 'No' if aslr_incorrect.stdout == '' else 'Si - Revisar manualmente' }}"
-
 
     - name: CIS 1.5.4 - Verificar si prelink esta instalado
       command: rpm -q prelink
@@ -199,11 +182,9 @@
       failed_when: false
       changed_when: false
 
-
     - name: CIS 1.5.4 - Mostrar estado de prelink
       debug:
         msg: "Estado de prelink: {{ prelink_check.stdout }}"
-
 
     - name: CIS 1.5.4 - Restaurar binarios a estado normal (si prelink esta instalado)
       command: prelink -ua
@@ -211,7 +192,6 @@
       register: prelink_restore
       failed_when: false
       ignore_errors: yes
-
 
     - name: CIS 1.5.4 - Desinstalar prelink (yum/dnf)
       yum:
@@ -221,7 +201,6 @@
         - prelink_check.rc == 0
         - ansible_pkg_mgr in ['yum', 'dnf']
       register: prelink_removed_yum
-
 
     - name: CIS 1.5.4 - Desinstalar prelink (apt)
       apt:
@@ -233,14 +212,12 @@
         - ansible_pkg_mgr == 'apt'
       register: prelink_removed_apt
 
-
     - name: CIS 1.5.4 - Verificar que prelink fue desinstalado
       command: rpm -q prelink
       register: prelink_final_check
       failed_when: prelink_final_check.rc == 0
       changed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 1.5.4 - Verificar que prelink fue desinstalado (Debian/Ubuntu)
       command: dpkg -l prelink
@@ -249,23 +226,21 @@
       changed_when: false
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 1.5.4 - Mostrar resultado final de prelink
       debug:
         msg: "Prelink ha sido {{ 'desinstalado correctamente' if (prelink_removed_yum.changed | default(false)) or (prelink_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
-    
+
     - name: 1.6.1.4 - verificar el estado actual del SELinux
       command: getenforce
       register: selinux_current
       changed_when: false
       failed_when: false
 
-
     - name: CIS 1.6.1.4 - Fallar si SELinux esta deshabilitado en runtime
       fail:
         msg: "SELinux esta DESHABILITADO. Esto no cumple CIS 1.6.1.4 y requiere intervencion manual."
       when: selinux_current.stdout == "Disabled"
-    
+
     - name: CIS 1.6.1.4 - Configurar SELinux en /etc/selinux/config
       replace:
         path: /etc/selinux/config
@@ -273,14 +248,12 @@
         replace: "SELINUX={{ selinux_desired_state }}"
       register: selinux_config_file
 
-
     - name: CIS 1.6.1.4 - Asegurar que SELINUXTYPE esta definido
       lineinfile:
         path: /etc/selinux/config
-        regexp: '^SELINUXTYPE='
-        line: 'SELINUXTYPE=targeted'
+        regexp: "^SELINUXTYPE="
+        line: "SELINUXTYPE=targeted"
         state: present
-
 
     - name: CIS 1.6.1.4 - Aplicar modo SELinux en runtime (enforcing)
       command: setenforce 1
@@ -289,7 +262,6 @@
         - selinux_current.stdout != "Enforcing"
       failed_when: false
 
-
     - name: CIS 1.6.1.4 - Aplicar modo SELinux en runtime (permissive)
       command: setenforce 0
       when:
@@ -297,12 +269,10 @@
         - selinux_current.stdout != "Permissive"
       failed_when: false
 
-
     - name: CIS 1.6.1.4 - Verificar modo final de SELinux
       command: getenforce
       register: selinux_final
       changed_when: false
-
 
     - name: CIS 1.6.1.4 - Mostrar resultado de SELinux
       debug:
@@ -310,14 +280,13 @@
           - "SELinux modo anterior: {{ selinux_current.stdout }}"
           - "SELinux modo configurado: {{ selinux_desired_state }}"
           - "SELinux modo final: {{ selinux_final.stdout }}"
-    
+
     - name: CIS 1.9 - Verificar actualizaciones de seguridad disponibles (yum/dnf)
       command: "{{ ansible_pkg_mgr }} check-update --security"
       register: security_updates
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 1.9 - Mostrar actualizaciones de seguridad pendientes
       debug:
@@ -326,10 +295,9 @@
           - "{{ security_updates.stdout_lines | default(['No hay actualizaciones pendientes']) }}"
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 1.9 - Aplicar actualizaciones de seguridad (yum)
       yum:
-        name: '*'
+        name: "*"
         state: latest
         security: yes
       when:
@@ -337,17 +305,15 @@
         - ansible_pkg_mgr == 'yum'
       register: yum_security_update
 
-
     - name: CIS 1.9 - Aplicar actualizaciones de seguridad (dnf)
       dnf:
-        name: '*'
+        name: "*"
         state: latest
         security: yes
       when:
         - cis_apply_security_updates | bool
         - ansible_pkg_mgr == 'dnf'
       register: dnf_security_update
-
 
     - name: CIS 1.9 - Verificar nuevamente actualizaciones de seguridad
       command: "{{ ansible_pkg_mgr }} check-update --security"
@@ -356,14 +322,13 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 1.9 - Resultado final de parches de seguridad
       debug:
         msg:
           - "Remediacion automatica aplicada: {{ cis_apply_security_updates }}"
           - "Actualizaciones pendientes despues de la ejecucion:"
           - "{{ security_updates_final.stdout_lines | default(['Sistema actualizado']) }}"
-    
+
     - name: CIS 2.2.2 - Verificar si X11 Server esta instalado
       shell: rpm -qa xorg-x11-server*
       register: x11_check
@@ -371,14 +336,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.2 - Mostrar paquetes X11 encontrados
       debug:
         msg:
           - "Paquetes X11 Server instalados:"
           - "{{ x11_check.stdout_lines if x11_check.stdout_lines | length > 0 else ['Ninguno'] }}"
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.2 - Eliminar X11 Server components (yum/dnf)
       yum:
@@ -389,14 +352,12 @@
         - x11_check.stdout_lines | length > 0
       register: x11_removed
 
-
     - name: CIS 2.2.2 - Verificar si X11 Server esta instalado (Debian/Ubuntu)
       shell: dpkg -l | grep -E "xserver-xorg|xorg"
       register: x11_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.2 - Eliminar X11 Server components (apt)
       apt:
@@ -410,14 +371,12 @@
         - x11_check_deb.rc == 0
       register: x11_removed_apt
 
-
     - name: CIS 2.2.2 - Verificacion final X11 (RHEL/CentOS)
       shell: rpm -qa xorg-x11-server*
       register: x11_final_check
       changed_when: false
       failed_when: x11_final_check.stdout_lines | length > 0
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.2 - Verificacion final X11 (Debian/Ubuntu)
       shell: dpkg -l | grep -E "xserver-xorg|xserver-common"
@@ -426,11 +385,9 @@
       failed_when: x11_final_check_deb.rc == 0
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.2 - Mostrar resultado final
       debug:
         msg: "X11 Server components han sido {{ 'eliminados correctamente' if (x11_removed.changed | default(false)) or (x11_removed_apt.changed | default(false)) else 'no estaban instalados' }}"
-
 
     - name: CIS 2.2.3 - Verificar si Avahi Server esta instalado (RHEL/CentOS)
       command: rpm -q avahi
@@ -439,7 +396,6 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.3 - Verificar si Avahi Server esta instalado (Debian/Ubuntu)
       command: dpkg -l avahi-daemon
       register: avahi_check_deb
@@ -447,13 +403,11 @@
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.3 - Mostrar estado de Avahi
       debug:
         msg:
           - "Estado de Avahi Server:"
           - "{{ avahi_check.stdout if ansible_pkg_mgr in ['yum', 'dnf'] else avahi_check_deb.stdout }}"
-
 
     - name: CIS 2.2.3 - Detener servicio Avahi si esta corriendo (RHEL/CentOS)
       systemd:
@@ -466,7 +420,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.3 - Detener servicio Avahi si esta corriendo (Debian/Ubuntu)
       systemd:
         name: avahi-daemon
@@ -478,7 +431,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.3 - Eliminar Avahi Server (yum/dnf)
       yum:
         name: avahi
@@ -487,7 +439,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - avahi_check.rc == 0
       register: avahi_removed
-
 
     - name: CIS 2.2.3 - Eliminar Avahi Server (apt)
       apt:
@@ -501,14 +452,12 @@
         - avahi_check_deb.rc == 0
       register: avahi_removed_apt
 
-
     - name: CIS 2.2.3 - Verificacion final Avahi (RHEL/CentOS)
       command: rpm -q avahi
       register: avahi_final_check
       changed_when: false
       failed_when: avahi_final_check.rc == 0
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.3 - Verificacion final Avahi (Debian/Ubuntu)
       command: dpkg -l avahi-daemon
@@ -517,11 +466,9 @@
       failed_when: avahi_final_check_deb.rc == 0
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.3 - Mostrar resultado final
       debug:
         msg: "Avahi Server ha sido {{ 'eliminado correctamente' if (avahi_removed.changed | default(false)) or (avahi_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
-
 
     - name: CIS 2.2.4 - Verificar si CUPS esta instalado (RHEL/CentOS)
       command: rpm -q cups
@@ -530,7 +477,6 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.4 - Verificar si CUPS esta instalado (Debian/Ubuntu)
       command: dpkg -l cups
       register: cups_check_deb
@@ -538,13 +484,11 @@
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.4 - Mostrar estado de CUPS
       debug:
         msg:
           - "Estado de CUPS (Common Unix Print System):"
           - "{{ cups_check.stdout if ansible_pkg_mgr in ['yum', 'dnf'] else cups_check_deb.stdout }}"
-
 
     - name: CIS 2.2.4 - Detener servicio CUPS si esta corriendo (RHEL/CentOS)
       systemd:
@@ -557,7 +501,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.4 - Detener servicio CUPS si esta corriendo (Debian/Ubuntu)
       systemd:
         name: cups
@@ -569,7 +512,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.4 - Eliminar CUPS (yum/dnf)
       yum:
         name: cups
@@ -578,7 +520,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - cups_check.rc == 0
       register: cups_removed
-
 
     - name: CIS 2.2.4 - Eliminar CUPS (apt)
       apt:
@@ -593,14 +534,12 @@
         - cups_check_deb.rc == 0
       register: cups_removed_apt
 
-
     - name: CIS 2.2.4 - Verificacion final CUPS (RHEL/CentOS)
       command: rpm -q cups
       register: cups_final_check
       changed_when: false
       failed_when: cups_final_check.rc == 0
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.4 - Verificacion final CUPS (Debian/Ubuntu)
       command: dpkg -l cups
@@ -609,13 +548,11 @@
       failed_when: cups_final_check_deb.rc == 0
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.4 - Mostrar resultado final
       debug:
-        msg: 
+        msg:
           - "CUPS ha sido {{ 'eliminado correctamente' if (cups_removed.changed | default(false)) or (cups_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: La eliminacion de CUPS previene la impresion desde este sistema"
-
 
     - name: CIS 2.2.5 - Verificar si DHCP Server esta instalado (RHEL/CentOS)
       command: rpm -q dhcp
@@ -624,7 +561,6 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.5 - Verificar si DHCP Server esta instalado (Debian/Ubuntu)
       command: dpkg -l isc-dhcp-server
       register: dhcp_check_deb
@@ -632,13 +568,11 @@
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.5 - Mostrar estado de DHCP Server
       debug:
         msg:
           - "Estado de DHCP Server:"
           - "{{ dhcp_check.stdout if ansible_pkg_mgr in ['yum', 'dnf'] else dhcp_check_deb.stdout }}"
-
 
     - name: CIS 2.2.5 - Detener servicio DHCP si esta corriendo (RHEL/CentOS)
       systemd:
@@ -651,7 +585,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.5 - Detener servicio DHCP si esta corriendo (Debian/Ubuntu)
       systemd:
         name: isc-dhcp-server
@@ -663,7 +596,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.5 - Eliminar DHCP Server (yum/dnf)
       yum:
         name: dhcp
@@ -672,7 +604,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - dhcp_check.rc == 0
       register: dhcp_removed
-
 
     - name: CIS 2.2.5 - Eliminar DHCP Server (apt)
       apt:
@@ -686,14 +617,12 @@
         - dhcp_check_deb.rc == 0
       register: dhcp_removed_apt
 
-
     - name: CIS 2.2.5 - Verificacion final DHCP Server (RHEL/CentOS)
       command: rpm -q dhcp
       register: dhcp_final_check
       changed_when: false
       failed_when: dhcp_final_check.rc == 0
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.5 - Verificacion final DHCP Server (Debian/Ubuntu)
       command: dpkg -l isc-dhcp-server
@@ -702,13 +631,11 @@
       failed_when: dhcp_final_check_deb.rc == 0
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.5 - Mostrar resultado final
       debug:
-        msg: 
+        msg:
           - "DHCP Server ha sido {{ 'eliminado correctamente' if (dhcp_removed.changed | default(false)) or (dhcp_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: Solo eliminar si el sistema NO actua como servidor DHCP"
-
 
     - name: CIS 2.2.6 - Verificar si LDAP Server esta instalado (RHEL/CentOS)
       command: rpm -q openldap-servers
@@ -717,7 +644,6 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.6 - Verificar si LDAP Server esta instalado (Debian/Ubuntu)
       command: dpkg -l slapd
       register: ldap_check_deb
@@ -725,13 +651,11 @@
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.6 - Mostrar estado de LDAP Server
       debug:
         msg:
           - "Estado de LDAP Server (OpenLDAP):"
           - "{{ ldap_check.stdout if ansible_pkg_mgr in ['yum', 'dnf'] else ldap_check_deb.stdout }}"
-
 
     - name: CIS 2.2.6 - Detener servicio LDAP si esta corriendo (RHEL/CentOS)
       systemd:
@@ -744,7 +668,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.6 - Detener servicio LDAP si esta corriendo (Debian/Ubuntu)
       systemd:
         name: slapd
@@ -756,7 +679,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.6 - Eliminar LDAP Server (yum/dnf)
       yum:
         name: openldap-servers
@@ -765,7 +687,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - ldap_check.rc == 0
       register: ldap_removed
-
 
     - name: CIS 2.2.6 - Eliminar LDAP Server (apt)
       apt:
@@ -779,14 +700,12 @@
         - ldap_check_deb.rc == 0
       register: ldap_removed_apt
 
-
     - name: CIS 2.2.6 - Verificacion final LDAP Server (RHEL/CentOS)
       command: rpm -q openldap-servers
       register: ldap_final_check
       changed_when: false
       failed_when: ldap_final_check.rc == 0
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.6 - Verificacion final LDAP Server (Debian/Ubuntu)
       command: dpkg -l slapd
@@ -795,13 +714,11 @@
       failed_when: ldap_final_check_deb.rc == 0
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.6 - Mostrar resultado final
       debug:
-        msg: 
+        msg:
           - "LDAP Server ha sido {{ 'eliminado correctamente' if (ldap_removed.changed | default(false)) or (ldap_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: Solo eliminar si el sistema NO actua como servidor LDAP"
-
 
     - name: CIS 2.2.7 - Verificar si DNS Server esta instalado (RHEL/CentOS)
       command: rpm -q bind
@@ -810,7 +727,6 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.7 - Verificar si DNS Server esta instalado (Debian/Ubuntu)
       command: dpkg -l bind9
       register: dns_check_deb
@@ -818,13 +734,11 @@
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.7 - Mostrar estado de DNS Server
       debug:
         msg:
           - "Estado de DNS Server (BIND):"
           - "{{ dns_check.stdout if ansible_pkg_mgr in ['yum', 'dnf'] else dns_check_deb.stdout }}"
-
 
     - name: CIS 2.2.7 - Detener servicio DNS si esta corriendo (RHEL/CentOS)
       systemd:
@@ -837,7 +751,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.7 - Detener servicio DNS si esta corriendo (Debian/Ubuntu)
       systemd:
         name: bind9
@@ -849,7 +762,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.7 - Eliminar DNS Server (yum/dnf)
       yum:
         name: bind
@@ -858,7 +770,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - dns_check.rc == 0
       register: dns_removed
-
 
     - name: CIS 2.2.7 - Eliminar DNS Server (apt)
       apt:
@@ -873,14 +784,12 @@
         - dns_check_deb.rc == 0
       register: dns_removed_apt
 
-
     - name: CIS 2.2.7 - Verificacion final DNS Server (RHEL/CentOS)
       command: rpm -q bind
       register: dns_final_check
       changed_when: false
       failed_when: dns_final_check.rc == 0
       when: ansible_pkg_mgr in ['yum', 'dnf']
-
 
     - name: CIS 2.2.7 - Verificacion final DNS Server (Debian/Ubuntu)
       command: dpkg -l bind9
@@ -889,13 +798,11 @@
       failed_when: dns_final_check_deb.rc == 0
       when: ansible_pkg_mgr == 'apt'
 
-
     - name: CIS 2.2.7 - Mostrar resultado final
       debug:
-        msg: 
+        msg:
           - "DNS Server (BIND) ha sido {{ 'eliminado correctamente' if (dns_removed.changed | default(false)) or (dns_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: Solo eliminar si el sistema NO actua como servidor DNS autorizado"
-
 
     - name: CIS 2.2.8 - Verificar si FTP Server (vsftpd) esta instalado (RHEL/CentOS)
       command: rpm -q vsftpd
@@ -904,14 +811,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.8 - Verificar si FTP Server (vsftpd) esta instalado (Debian/Ubuntu)
       command: dpkg -l vsftpd
       register: ftp_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.8 - Detener servicio FTP si esta corriendo
       systemd:
@@ -924,13 +829,11 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.8 - Eliminar FTP Server
       package:
         name: vsftpd
         state: absent
       register: ftp_removed
-
 
     - name: CIS 2.2.9 - Verificar si HTTP Server esta instalado (RHEL/CentOS)
       command: rpm -q httpd
@@ -939,14 +842,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.9 - Verificar si HTTP Server esta instalado (Debian/Ubuntu)
       command: dpkg -l apache2
       register: http_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.9 - Detener servicio HTTP si esta corriendo
       systemd:
@@ -959,13 +860,11 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.9 - Eliminar HTTP Server
       package:
         name: "{{ 'httpd' if ansible_pkg_mgr in ['yum','dnf'] else 'apache2' }}"
         state: absent
       register: http_removed
-
 
     - name: CIS 2.2.10 - Verificar si IMAP/POP3 Server (dovecot) esta instalado (RHEL/CentOS)
       command: rpm -q dovecot
@@ -974,14 +873,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.10 - Verificar si IMAP/POP3 Server esta instalado (Debian/Ubuntu)
       command: dpkg -l dovecot-core
       register: mail_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.10 - Detener servicio IMAP/POP3
       systemd:
@@ -994,13 +891,11 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.10 - Eliminar IMAP/POP3 Server
       package:
         name: dovecot
         state: absent
       register: mail_removed
-
 
     - name: CIS 2.2.11 - Verificar si Samba esta instalado (RHEL/CentOS)
       command: rpm -q samba
@@ -1009,14 +904,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.11 - Verificar si Samba esta instalado (Debian/Ubuntu)
       command: dpkg -l samba
       register: samba_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.11 - Detener servicio Samba si esta corriendo
       systemd:
@@ -1029,7 +922,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.11 - Eliminar Samba (yum/dnf)
       yum:
         name: samba
@@ -1038,7 +930,6 @@
         - ansible_pkg_mgr in ['yum','dnf']
         - samba_check.rc == 0
       register: samba_removed
-
 
     - name: CIS 2.2.11 - Eliminar Samba (apt)
       apt:
@@ -1050,14 +941,12 @@
         - samba_check_deb.rc == 0
       register: samba_removed_apt
 
-
     - name: CIS 2.2.11 - Verificacion final Samba (RHEL/CentOS)
       command: rpm -q samba
       register: samba_final_check
       changed_when: false
       failed_when: samba_final_check.rc == 0
       when: ansible_pkg_mgr in ['yum','dnf']
-
 
     - name: CIS 2.2.12 - Verificar si HTTP Proxy (Squid) esta instalado (RHEL/CentOS)
       command: rpm -q squid
@@ -1066,14 +955,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum','dnf']
 
-
     - name: CIS 2.2.12 - Verificar si HTTP Proxy (Squid) esta instalado (Debian/Ubuntu)
       command: dpkg -l squid
       register: squid_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.12 - Detener servicio Squid si esta corriendo
       systemd:
@@ -1086,13 +973,11 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.12 - Eliminar HTTP Proxy Server (Squid)
       package:
         name: squid
         state: absent
       register: squid_removed
-
 
     - name: CIS 2.2.13 - Verificar si SNMP Server (net-snmp) esta instalado (RHEL/CentOS)
       command: rpm -q net-snmp
@@ -1101,14 +986,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.13 - Verificar si SNMP Server esta instalado (Debian/Ubuntu)
       command: dpkg -l snmpd
       register: snmp_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.13 - Detener servicio SNMP si esta corriendo
       systemd:
@@ -1121,7 +1004,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.13 - Eliminar SNMP Server (yum/dnf)
       yum:
         name: net-snmp
@@ -1130,7 +1012,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - snmp_check.rc == 0
       register: snmp_removed
-
 
     - name: CIS 2.2.13 - Eliminar SNMP Server (apt)
       apt:
@@ -1144,13 +1025,11 @@
         - snmp_check_deb.rc == 0
       register: snmp_removed_apt
 
-
     - name: CIS 2.2.13 - Mostrar resultado
       debug:
-        msg: 
+        msg:
           - "SNMP Server ha sido {{ 'eliminado correctamente' if (snmp_removed.changed | default(false)) or (snmp_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: SNMPv1/v2 transmiten datos en texto claro sin cifrado"
-
 
     - name: CIS 2.2.14 - Verificar si NIS Server (ypserv) esta instalado (RHEL/CentOS)
       command: rpm -q ypserv
@@ -1159,14 +1038,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.14 - Verificar si NIS Server esta instalado (Debian/Ubuntu)
       command: dpkg -l nis
       register: nis_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.14 - Detener servicio NIS si esta corriendo
       systemd:
@@ -1179,7 +1056,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.14 - Eliminar NIS Server (yum/dnf)
       yum:
         name: ypserv
@@ -1188,7 +1064,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - nis_check.rc == 0
       register: nis_removed
-
 
     - name: CIS 2.2.14 - Eliminar NIS Server (apt)
       apt:
@@ -1200,13 +1075,11 @@
         - nis_check_deb.rc == 0
       register: nis_removed_apt
 
-
     - name: CIS 2.2.14 - Mostrar resultado
       debug:
-        msg: 
+        msg:
           - "NIS Server ha sido {{ 'eliminado correctamente' if (nis_removed.changed | default(false)) or (nis_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: NIS es inherentemente inseguro, reemplazado por LDAP"
-
 
     - name: CIS 2.2.15 - Verificar si Telnet Server esta instalado (RHEL/CentOS)
       command: rpm -q telnet-server
@@ -1215,14 +1088,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.15 - Verificar si Telnet Server esta instalado (Debian/Ubuntu)
       command: dpkg -l telnetd
       register: telnet_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.15 - Detener servicio Telnet si esta corriendo
       systemd:
@@ -1235,7 +1106,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.15 - Eliminar Telnet Server (yum/dnf)
       yum:
         name: telnet-server
@@ -1244,7 +1114,6 @@
         - ansible_pkg_mgr in ['yum', 'dnf']
         - telnet_check.rc == 0
       register: telnet_removed
-
 
     - name: CIS 2.2.15 - Eliminar Telnet Server (apt)
       apt:
@@ -1256,13 +1125,11 @@
         - telnet_check_deb.rc == 0
       register: telnet_removed_apt
 
-
     - name: CIS 2.2.15 - Mostrar resultado
       debug:
-        msg: 
+        msg:
           - "Telnet Server ha sido {{ 'eliminado correctamente' if (telnet_removed.changed | default(false)) or (telnet_removed_apt.changed | default(false)) else 'no estaba instalado' }}"
           - "NOTA: Telnet no esta cifrado, usar SSH en su lugar"
-
 
     - name: CIS 2.2.16 - Verificar si NFS Server (nfs-utils) esta instalado (RHEL/CentOS)
       command: rpm -q nfs-utils
@@ -1271,14 +1138,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.16 - Verificar si NFS Server esta instalado (Debian/Ubuntu)
       command: dpkg -l nfs-kernel-server
       register: nfs_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.16 - Detener y deshabilitar servicio NFS si esta corriendo
       systemd:
@@ -1292,7 +1157,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.16 - Eliminar NFS Server (yum/dnf) - solo si no es dependencia
       yum:
         name: nfs-utils
@@ -1304,7 +1168,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.16 - Eliminar NFS Server (apt)
       apt:
         name: nfs-kernel-server
@@ -1315,13 +1178,11 @@
         - nfs_check_deb.rc == 0
       register: nfs_removed_apt
 
-
     - name: CIS 2.2.16 - Mostrar resultado
       debug:
-        msg: 
+        msg:
           - "NFS Server ha sido {{ 'detenido/deshabilitado' if (nfs_removed.changed | default(false)) or (nfs_removed_apt.changed | default(false)) else 'procesado' }}"
           - "NOTA: Si nfs-utils es dependencia de libvirt, el servicio nfs-server queda deshabilitado"
-
 
     - name: CIS 2.2.17 - Verificar si rpcbind esta instalado (RHEL/CentOS)
       command: rpm -q rpcbind
@@ -1330,14 +1191,12 @@
       failed_when: false
       when: ansible_pkg_mgr in ['yum', 'dnf']
 
-
     - name: CIS 2.2.17 - Verificar si rpcbind esta instalado (Debian/Ubuntu)
       command: dpkg -l rpcbind
       register: rpcbind_check_deb
       changed_when: false
       failed_when: false
       when: ansible_pkg_mgr == 'apt'
-
 
     - name: CIS 2.2.17 - Detener y deshabilitar servicio rpcbind
       systemd:
@@ -1351,7 +1210,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.17 - Eliminar rpcbind (yum/dnf) - solo si no es dependencia
       yum:
         name: rpcbind
@@ -1363,7 +1221,6 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.17 - Eliminar rpcbind (apt)
       apt:
         name: rpcbind
@@ -1374,13 +1231,11 @@
         - rpcbind_check_deb.rc == 0
       register: rpcbind_removed_apt
 
-
     - name: CIS 2.2.17 - Mostrar resultado
       debug:
-        msg: 
+        msg:
           - "rpcbind ha sido {{ 'detenido/deshabilitado' if (rpcbind_removed.changed | default(false)) or (rpcbind_removed_apt.changed | default(false)) else 'procesado' }}"
           - "NOTA: rpcbind puede ser usado en ataques DDoS (amplificacion 7x-28x)"
-
 
     - name: CIS 2.2.18 - Verificar configuracion de MTA (Mail Transfer Agent)
       shell: ss -lntu | grep -E ':25\s' | grep -E -v '\s(127.0.0.1|\[?::1\]?):25\s'
@@ -1388,13 +1243,11 @@
       changed_when: false
       failed_when: false
 
-
     - name: CIS 2.2.18 - Mostrar estado actual del MTA
       debug:
         msg:
           - "Verificacion MTA en puerto 25:"
           - "{{ 'MTA escuchando en interfaces no-loopback - REQUIERE CORRECCION' if mta_check.stdout != '' else 'MTA configurado correctamente (solo loopback)' }}"
-
 
     - name: CIS 2.2.18 - Verificar si Postfix esta instalado
       command: "{{ 'rpm -q postfix' if ansible_pkg_mgr in ['yum','dnf'] else 'dpkg -l postfix' }}"
@@ -1402,19 +1255,17 @@
       changed_when: false
       failed_when: false
 
-
     - name: CIS 2.2.18 - Configurar Postfix para modo local-only
       lineinfile:
         path: /etc/postfix/main.cf
         regexp: '^inet_interfaces\s*='
-        line: 'inet_interfaces = loopback-only'
+        line: "inet_interfaces = loopback-only"
         state: present
         create: no
       when:
         - postfix_check.rc == 0
         - mta_check.stdout != ''
       register: postfix_config
-
 
     - name: CIS 2.2.18 - Reiniciar Postfix para aplicar cambios
       systemd:
@@ -1425,26 +1276,23 @@
       failed_when: false
       ignore_errors: yes
 
-
     - name: CIS 2.2.18 - Verificar configuracion final del MTA
       shell: ss -lntu | grep -E ':25\s' | grep -E -v '\s(127.0.0.1|\[?::1\]?):25\s'
       register: mta_final_check
       changed_when: false
       failed_when: mta_final_check.stdout != ''
 
-
     - name: CIS 2.2.18 - Mostrar resultado final
       debug:
-        msg: 
+        msg:
           - "Configuracion MTA completada"
           - "Estado: {{ 'CORRECTO - Solo escucha en loopback' if mta_final_check.stdout == '' else 'ADVERTENCIA - Revisar configuracion manual' }}"
-    
+
     - name: CIS 3.2.2 - Buscar archivos sysctl.d para verificar send_redirects
       find:
         paths: /etc/sysctl.d
         patterns: "*.conf"
       register: sysctl_d_files_redirects
-
 
     - name: CIS 3.2.2 - Comentar configuraciones incorrectas de send_redirects all en /etc/sysctl.conf
       replace:
@@ -1453,14 +1301,12 @@
         replace: '# \g<0>'
       register: sysctl_conf_redirects_all
 
-
     - name: CIS 3.2.2 - Comentar configuraciones incorrectas de send_redirects default en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.conf\.default\.send_redirects\s*=\s*1'
         replace: '# \g<0>'
       register: sysctl_conf_redirects_default
-
 
     - name: CIS 3.2.2 - Comentar configuraciones incorrectas de send_redirects all en /etc/sysctl.d/*
       replace:
@@ -1471,7 +1317,6 @@
       when: sysctl_d_files_redirects.matched > 0
       register: sysctl_d_redirects_all
 
-
     - name: CIS 3.2.2 - Comentar configuraciones incorrectas de send_redirects default en /etc/sysctl.d/*
       replace:
         path: "{{ item.path }}"
@@ -1481,7 +1326,6 @@
       when: sysctl_d_files_redirects.matched > 0
       register: sysctl_d_redirects_default
 
-
     - name: CIS 3.2.2 - Configurar send_redirects en /etc/sysctl.d/99-cis-network.conf
       sysctl:
         name: "{{ item.name }}"
@@ -1490,10 +1334,9 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }
-        - { name: 'net.ipv4.conf.default.send_redirects', value: '0' }
+        - { name: "net.ipv4.conf.all.send_redirects", value: "0" }
+        - { name: "net.ipv4.conf.default.send_redirects", value: "0" }
       register: send_redirects_config
-
 
     - name: CIS 3.2.2 - Aplicar configuracion de send_redirects inmediatamente
       command: "{{ item }}"
@@ -1503,7 +1346,6 @@
         - sysctl -w net.ipv4.route.flush=1
       when: send_redirects_config.changed
 
-
     - name: CIS 3.2.2 - Verificar configuracion actual de send_redirects
       command: "{{ item }}"
       loop:
@@ -1512,13 +1354,11 @@
       register: send_redirects_current
       changed_when: false
 
-
     - name: CIS 3.2.2 - Verificar que no existan configuraciones incorrectas de send_redirects
       shell: |
         grep -Es "^\s*net\.ipv4\.conf\.(all|default)\.send_redirects\s*=\s*1" /etc/sysctl.conf /etc/sysctl.d/*.conf 2>/dev/null || true
       register: send_redirects_incorrect
       changed_when: false
-
 
     - name: CIS 3.2.2 - Mostrar resultado de verificacion de send_redirects
       debug:
@@ -1527,9 +1367,6 @@
           - "{{ send_redirects_current.results | map(attribute='stdout') | list }}"
           - "Configuraciones incorrectas encontradas: {{ 'No' if send_redirects_incorrect.stdout == '' else 'Si - Revisar manualmente' }}"
           - "ICMP Redirects deshabilitados - previene manipulacion de tablas de enrutamiento"
-
-
-
 
     - name: CIS 3.3.1 - Verificar si IPv6 esta habilitado
       shell: |
@@ -1541,14 +1378,12 @@
       register: ipv6_status
       changed_when: false
 
-
     - name: CIS 3.3.1 - Comentar configuraciones incorrectas de accept_source_route IPv4 en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.conf\.(all|default)\.accept_source_route\s*=\s*1'
         replace: '# \g<0>'
       register: sysctl_conf_source_route_ipv4
-
 
     - name: CIS 3.3.1 - Comentar configuraciones incorrectas de accept_source_route IPv4 en /etc/sysctl.d/*
       replace:
@@ -1558,7 +1393,6 @@
       loop: "{{ sysctl_d_files_redirects.files }}"
       when: sysctl_d_files_redirects.matched > 0
 
-
     - name: CIS 3.3.1 - Configurar accept_source_route IPv4 en /etc/sysctl.d/99-cis-network.conf
       sysctl:
         name: "{{ item.name }}"
@@ -1567,10 +1401,9 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv4.conf.all.accept_source_route', value: '0' }
-        - { name: 'net.ipv4.conf.default.accept_source_route', value: '0' }
+        - { name: "net.ipv4.conf.all.accept_source_route", value: "0" }
+        - { name: "net.ipv4.conf.default.accept_source_route", value: "0" }
       register: accept_source_route_ipv4_config
-
 
     - name: CIS 3.3.1 - Aplicar configuracion de accept_source_route IPv4 inmediatamente
       command: "{{ item }}"
@@ -1580,7 +1413,6 @@
         - sysctl -w net.ipv4.route.flush=1
       when: accept_source_route_ipv4_config.changed
 
-
     - name: CIS 3.3.1 - Comentar configuraciones incorrectas de accept_source_route IPv6 en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
@@ -1588,17 +1420,15 @@
         replace: '# \g<0>'
       when: ipv6_status.stdout == "0"
 
-
     - name: CIS 3.3.1 - Comentar configuraciones incorrectas de accept_source_route IPv6 en /etc/sysctl.d/*
       replace:
         path: "{{ item.path }}"
         regexp: '^\s*net\.ipv6\.conf\.(all|default)\.accept_source_route\s*=\s*1'
         replace: '# \g<0>'
       loop: "{{ sysctl_d_files_redirects.files }}"
-      when: 
+      when:
         - sysctl_d_files_redirects.matched > 0
         - ipv6_status.stdout == "0"
-
 
     - name: CIS 3.3.1 - Configurar accept_source_route IPv6 en /etc/sysctl.d/99-cis-network.conf
       sysctl:
@@ -1608,11 +1438,10 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv6.conf.all.accept_source_route', value: '0' }
-        - { name: 'net.ipv6.conf.default.accept_source_route', value: '0' }
+        - { name: "net.ipv6.conf.all.accept_source_route", value: "0" }
+        - { name: "net.ipv6.conf.default.accept_source_route", value: "0" }
       when: ipv6_status.stdout == "0"
       register: accept_source_route_ipv6_config
-
 
     - name: CIS 3.3.1 - Aplicar configuracion de accept_source_route IPv6 inmediatamente
       command: "{{ item }}"
@@ -1620,23 +1449,22 @@
         - sysctl -w net.ipv6.conf.all.accept_source_route=0
         - sysctl -w net.ipv6.conf.default.accept_source_route=0
         - sysctl -w net.ipv6.route.flush=1
-      when: 
+      when:
         - ipv6_status.stdout == "0"
         - accept_source_route_ipv6_config.changed
-
 
     - name: CIS 3.3.1 - Mostrar resultado
       debug:
         msg:
           - "Source routed packets deshabilitados"
           - "IPv6 estado: {{ 'Habilitado - Configurado' if ipv6_status.stdout == '0' else 'Deshabilitado - Omitido' }}"
-    
+
     - name: CIS 3.3.2 - Comentar configuraciones incorrectas de accept_redirects IPV4 en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.conf\.(all|default)\.accept_redirects\s*=\s*1'
         replace: '# \g<0>'
-    
+
     - name: CIS 3.3.2 - Comentar configuraciones incorrectas de accept_redirects IPv4 en /etc/sysctl.d/*
       replace:
         path: "{{ item.path }}"
@@ -1644,7 +1472,6 @@
         replace: '# \g<0>'
       loop: "{{ sysctl_d_files_redirects.files }}"
       when: sysctl_d_files_redirects.matched > 0
-
 
     - name: CIS 3.3.2 - Configurar accept_redirects IPv4 en /etc/sysctl.d/99-cis-network.conf
       sysctl:
@@ -1654,10 +1481,9 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
-        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' }
+        - { name: "net.ipv4.conf.all.accept_redirects", value: "0" }
+        - { name: "net.ipv4.conf.default.accept_redirects", value: "0" }
       register: accept_redirects_ipv4_config
-
 
     - name: CIS 3.3.2 - Aplicar configuracion de accept_redirects IPv4 inmediatamente
       command: "{{ item }}"
@@ -1667,7 +1493,6 @@
         - sysctl -w net.ipv4.route.flush=1
       when: accept_redirects_ipv4_config.changed
 
-
     - name: CIS 3.3.2 - Comentar configuraciones incorrectas de accept_redirects IPv6 en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
@@ -1675,17 +1500,15 @@
         replace: '# \g<0>'
       when: ipv6_status.stdout == "0"
 
-
     - name: CIS 3.3.2 - Comentar configuraciones incorrectas de accept_redirects IPv6 en /etc/sysctl.d/*
       replace:
         path: "{{ item.path }}"
         regexp: '^\s*net\.ipv6\.conf\.(all|default)\.accept_redirects\s*=\s*1'
         replace: '# \g<0>'
       loop: "{{ sysctl_d_files_redirects.files }}"
-      when: 
+      when:
         - sysctl_d_files_redirects.matched > 0
         - ipv6_status.stdout == "0"
-
 
     - name: CIS 3.3.2 - Configurar accept_redirects IPv6 en /etc/sysctl.d/99-cis-network.conf
       sysctl:
@@ -1695,11 +1518,10 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv6.conf.all.accept_redirects', value: '0' }
-        - { name: 'net.ipv6.conf.default.accept_redirects', value: '0' }
+        - { name: "net.ipv6.conf.all.accept_redirects", value: "0" }
+        - { name: "net.ipv6.conf.default.accept_redirects", value: "0" }
       when: ipv6_status.stdout == "0"
       register: accept_redirects_ipv6_config
-
 
     - name: CIS 3.3.2 - Aplicar configuracion de accept_redirects IPv6 inmediatamente
       command: "{{ item }}"
@@ -1707,23 +1529,21 @@
         - sysctl -w net.ipv6.conf.all.accept_redirects=0
         - sysctl -w net.ipv6.conf.default.accept_redirects=0
         - sysctl -w net.ipv6.route.flush=1
-      when: 
+      when:
         - ipv6_status.stdout == "0"
         - accept_redirects_ipv6_config.changed
-
 
     - name: CIS 3.3.2 - Mostrar resultado
       debug:
         msg:
           - "ICMP redirects NO aceptados - previene actualizaciones maliciosas de rutas"
           - "IPv6 estado: {{ 'Habilitado - Configurado' if ipv6_status.stdout == '0' else 'Deshabilitado - Omitido' }}"
-    
+
     - name: CIS 3.3.4 - Comentar configuraciones incorrectas de log_martians en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.conf\.(all|default)\.log_martians\s*=\s*0'
         replace: '# \g<0>'
-
 
     - name: CIS 3.3.4 - Comentar configuraciones incorrectas de log_martians en /etc/sysctl.d/*
       replace:
@@ -1733,7 +1553,6 @@
       loop: "{{ sysctl_d_files_redirects.files }}"
       when: sysctl_d_files_redirects.matched > 0
 
-
     - name: CIS 3.3.4 - Configurar log_martians en /etc/sysctl.d/99-cis-network.conf
       sysctl:
         name: "{{ item.name }}"
@@ -1742,10 +1561,9 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv4.conf.all.log_martians', value: '1' }
-        - { name: 'net.ipv4.conf.default.log_martians', value: '1' }
+        - { name: "net.ipv4.conf.all.log_martians", value: "1" }
+        - { name: "net.ipv4.conf.default.log_martians", value: "1" }
       register: log_martians_config
-
 
     - name: CIS 3.3.4 - Aplicar configuracion de log_martians inmediatamente
       command: "{{ item }}"
@@ -1755,7 +1573,6 @@
         - sysctl -w net.ipv4.route.flush=1
       when: log_martians_config.changed
 
-
     - name: CIS 3.3.4 - Verificar configuracion actual de log_martians
       command: "{{ item }}"
       loop:
@@ -1764,13 +1581,11 @@
       register: log_martians_current
       changed_when: false
 
-
     - name: CIS 3.3.4 - Verificar que no existan configuraciones incorrectas de log_martians
       shell: |
         grep -Es "^\s*net\.ipv4\.conf\.(all|default)\.log_martians\s*=\s*0" /etc/sysctl.conf /etc/sysctl.d/*.conf 2>/dev/null || true
       register: log_martians_incorrect
       changed_when: false
-
 
     - name: CIS 3.3.4 - Mostrar resultado
       debug:
@@ -1780,13 +1595,11 @@
           - "Configuraciones incorrectas: {{ 'No' if log_martians_incorrect.stdout == '' else 'Si - Revisar manualmente' }}"
           - "Los paquetes con direcciones no enrutables se registraran en kernel log"
 
-
     - name: CIS 3.3.5 - Comentar configuraciones incorrectas de icmp_echo_ignore_broadcasts en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.icmp_echo_ignore_broadcasts\s*=\s*0'
         replace: '# \g<0>'
-
 
     - name: CIS 3.3.5 - Comentar configuraciones incorrectas de icmp_echo_ignore_broadcasts en /etc/sysctl.d/*
       replace:
@@ -1796,16 +1609,14 @@
       loop: "{{ sysctl_d_files_redirects.files }}"
       when: sysctl_d_files_redirects.matched > 0
 
-
     - name: CIS 3.3.5 - Configurar icmp_echo_ignore_broadcasts en /etc/sysctl.d/99-cis-network.conf
       sysctl:
         name: net.ipv4.icmp_echo_ignore_broadcasts
-        value: '1'
+        value: "1"
         sysctl_file: /etc/sysctl.d/99-cis-network.conf
         state: present
         reload: yes
       register: icmp_broadcast_config
-
 
     - name: CIS 3.3.5 - Aplicar configuracion de icmp_echo_ignore_broadcasts inmediatamente
       command: "{{ item }}"
@@ -1814,19 +1625,16 @@
         - sysctl -w net.ipv4.route.flush=1
       when: icmp_broadcast_config.changed
 
-
     - name: CIS 3.3.5 - Verificar configuracion actual de icmp_echo_ignore_broadcasts
       command: sysctl net.ipv4.icmp_echo_ignore_broadcasts
       register: icmp_broadcast_current
       changed_when: false
-
 
     - name: CIS 3.3.5 - Verificar que no existan configuraciones incorrectas
       shell: |
         grep -Es "^\s*net\.ipv4\.icmp_echo_ignore_broadcasts\s*=\s*0" /etc/sysctl.conf /etc/sysctl.d/*.conf 2>/dev/null || true
       register: icmp_broadcast_incorrect
       changed_when: false
-
 
     - name: CIS 3.3.5 - Mostrar resultado
       debug:
@@ -1836,13 +1644,11 @@
           - "Configuraciones incorrectas: {{ 'No' if icmp_broadcast_incorrect.stdout == '' else 'Si - Revisar manualmente' }}"
           - "Proteccion contra ataques Smurf habilitada"
 
-
     - name: CIS 3.3.7 - Comentar configuraciones incorrectas de rp_filter en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.conf\.(all|default)\.rp_filter\s*=\s*0'
         replace: '# \g<0>'
-
 
     - name: CIS 3.3.7 - Comentar configuraciones incorrectas de rp_filter en /etc/sysctl.d/*
       replace:
@@ -1852,7 +1658,6 @@
       loop: "{{ sysctl_d_files_redirects.files }}"
       when: sysctl_d_files_redirects.matched > 0
 
-
     - name: CIS 3.3.7 - Configurar Reverse Path Filtering en /etc/sysctl.d/99-cis-network.conf
       sysctl:
         name: "{{ item.name }}"
@@ -1861,10 +1666,9 @@
         state: present
         reload: yes
       loop:
-        - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }
-        - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }
+        - { name: "net.ipv4.conf.all.rp_filter", value: "1" }
+        - { name: "net.ipv4.conf.default.rp_filter", value: "1" }
       register: rp_filter_config
-
 
     - name: CIS 3.3.7 - Aplicar configuracion de rp_filter inmediatamente
       command: "{{ item }}"
@@ -1874,7 +1678,6 @@
         - sysctl -w net.ipv4.route.flush=1
       when: rp_filter_config.changed
 
-
     - name: CIS 3.3.7 - Verificar configuracion actual de rp_filter
       command: "{{ item }}"
       loop:
@@ -1883,13 +1686,11 @@
       register: rp_filter_current
       changed_when: false
 
-
     - name: CIS 3.3.7 - Verificar que no existan configuraciones incorrectas de rp_filter
       shell: |
         grep -Es "^\s*net\.ipv4\.conf\.(all|default)\.rp_filter\s*=\s*0" /etc/sysctl.conf /etc/sysctl.d/*.conf 2>/dev/null || true
       register: rp_filter_incorrect
       changed_when: false
-
 
     - name: CIS 3.3.7 - Mostrar resultado
       debug:
@@ -1900,13 +1701,11 @@
           - "Proteccion contra IP spoofing mediante validacion de ruta de retorno"
           - "ADVERTENCIA: Incompatible con enrutamiento asimetrico (BGP, OSPF)"
 
-
     - name: CIS 3.3.8 - Comentar configuraciones incorrectas de tcp_syncookies en /etc/sysctl.conf
       replace:
         path: /etc/sysctl.conf
         regexp: '^\s*net\.ipv4\.tcp_syncookies\s*=\s*0'
         replace: '# \g<0>'
-
 
     - name: CIS 3.3.8 - Comentar configuraciones incorrectas de tcp_syncookies en /etc/sysctl.d/*
       replace:
@@ -1916,16 +1715,14 @@
       loop: "{{ sysctl_d_files_redirects.files }}"
       when: sysctl_d_files_redirects.matched > 0
 
-
     - name: CIS 3.3.8 - Configurar TCP SYN Cookies en /etc/sysctl.d/99-cis-network.conf
       sysctl:
         name: net.ipv4.tcp_syncookies
-        value: '1'
+        value: "1"
         sysctl_file: /etc/sysctl.d/99-cis-network.conf
         state: present
         reload: yes
       register: tcp_syncookies_config
-
 
     - name: CIS 3.3.8 - Aplicar configuracion de tcp_syncookies inmediatamente
       command: "{{ item }}"
@@ -1934,12 +1731,10 @@
         - sysctl -w net.ipv4.route.flush=1
       when: tcp_syncookies_config.changed
 
-
     - name: CIS 3.3.8 - Verificar configuracion actual de tcp_syncookies
       command: sysctl net.ipv4.tcp_syncookies
       register: tcp_syncookies_current
       changed_when: false
-
 
     - name: CIS 3.3.8 - Verificar que no existan configuraciones incorrectas de tcp_syncookies
       shell: |
@@ -1947,14 +1742,12 @@
       register: tcp_syncookies_incorrect
       changed_when: false
 
-
     - name: CIS 3.3.8 - Verificar estado de la cola SYN
       shell: |
         netstat -an | grep -c "SYN_RECV" || echo "0"
       register: syn_queue_status
       changed_when: false
       failed_when: false
-
 
     - name: CIS 3.3.8 - Mostrar resultado
       debug:
@@ -1966,31 +1759,26 @@
           - "Proteccion contra ataques SYN Flood habilitada"
           - "Sistema puede aceptar conexiones legitimas incluso bajo ataque DoS"
 
-
     - name: CIS 5.1.8 - Ensure cron is restricted to authorized users (Automated)
       command: echo "CIS 5.1.8 - Ensure cron is restricted to authorized users"
       register: cis_5_1_8_marker
       changed_when: false
 
-
-    - name: CIS 5.1.8 - Verificar si cron esta instalado 
-          command: which cron 
-          register: cron_installed 
-          changed_when: false
-          failed_when: false
-
+    - name: CIS 5.1.8 - Verificar si cron esta instalado
+      command: which cron
+      register: cron_installed
+      changed_when: false
+      failed_when: false
 
     - name: CIS 5.1.8 - Verificar estado actual del /etc/cron.deny
       stat:
         path: "{{ cron_deny_file }}"
       register: cron_deny_stat
 
-
     - name: CIS 5.1.8 - Verificar estado actual del /etc/cron.allow
       stat:
         path: "{{ cron_allow_file }}"
       register: cron_allow_stat
-
 
     - name: CIS 5.1.8 - Estado antes de remediar
       debug:
@@ -1999,118 +1787,107 @@
           - "  Cron instalado: {{ 'Si' if cron_installed.rc == 0 else 'No' }}"
           - "  /etc/cron.deny existe: {{ 'Si' if cron_deny_stat.stat.exists else 'No' }}"
           - "  /etc/cron.allow existe: {{ 'Si' if cron_allow_stat.stat.exists else 'No' }}"
-      when: cron_installed.rc == 0 
-
+      when: cron_installed.rc == 0
 
     - name: CIS 5.1.8 - Hacer un backup de /etc/cron.deny si existe
       copy:
-            src: "{{ cron_deny_file }}"
-            dest: "{{ cron_deny_file }}.backup.{{ ansible_date_time.epoch }}"
-            remote_src: yes 
-          when: 
-            - cron_installed.rc == 0 
-            - cron_deny_stat.stat.exists
-
+        src: "{{ cron_deny_file }}"
+        dest: "{{ cron_deny_file }}.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when:
+        - cron_installed.rc == 0
+        - cron_deny_stat.stat.exists
 
     - name: CIS 5.1.8 - Hacer backup de /etc/cron.allow si existe
-          copy:
-            src: "{{ cron_allow_file }}"
-            dest: "{{ cron_allow_file }}.backup.{{ ansible_date_time.epoch }}"
-            remote_src: yes
-          when: 
-            - cron_installed.rc == 0
-            - cron_allow_stat.stat.exists
+      copy:
+        src: "{{ cron_allow_file }}"
+        dest: "{{ cron_allow_file }}.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when:
+        - cron_installed.rc == 0
+        - cron_allow_stat.stat.exists
 
-
-    - name: CIS 5.1.8 - Eliminar /etc/cron.deny 
-          file:
-            path: "{{ cron_deny_file }}"
-            state: absent
-          when: cron_installed.rc == 0 
-
+    - name: CIS 5.1.8 - Eliminar /etc/cron.deny
+      file:
+        path: "{{ cron_deny_file }}"
+        state: absent
+      when: cron_installed.rc == 0
 
     - name: CIS 5.1.8 - Crear /etc/cron.allow si no existe
-          file:
-            path: "{{ cron_allow_file }}"
-            state: touch
-            modification_time: preserve
-            access_time: preserve
-          when: cron_installed.rc == 0 
-        
-    - name: CIS 5.1.8 - Configurar permisos de /etc/cron.allow
-          file: 
-            path: "{{ cron_allow_file }}"
-            owner: root
-            group: root
-            mode: '0600'
-          when: cron_installed.rc == 0
+      file:
+        path: "{{ cron_allow_file }}"
+        state: touch
+        modification_time: preserve
+        access_time: preserve
+      when: cron_installed.rc == 0
 
+    - name: CIS 5.1.8 - Configurar permisos de /etc/cron.allow
+      file:
+        path: "{{ cron_allow_file }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when: cron_installed.rc == 0
 
     - name: CIS 5.1.8 - Agregar usuarios autorizados a /etc/cron.allow
-          lineinfile:
-            path: "{{ cron_allow_file }}"
-            line: "{{ item }}"
-            create: yes
-            owner: root
-            group: root
-            mode: '0600'
-          loop: "{{ authorized_cron_users }}"
-          when:
-            - cron_installed.rc == 0
-            - authorized_cron_users is defined
-            - authorized_cron_users | length > 0
-
+      lineinfile:
+        path: "{{ cron_allow_file }}"
+        line: "{{ item }}"
+        create: yes
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ authorized_cron_users }}"
+      when:
+        - cron_installed.rc == 0
+        - authorized_cron_users is defined
+        - authorized_cron_users | length > 0
 
     - name: CIS 5.1.8 - Verificar usuarios autorizados de cron
-          lineinfile:
-            path: "{{ cron_allow_file }}"
-            line: "{{ item }}"
-            create: yes
-            owner: root
-            group: root
-            mode: '0600'
-          loop: "{{ authorized_cron_users }}"
-          when:
-            - cron_installed.rc == 0
-            - authorized_cron_users is defined
-            - authorized_cron_users | length > 0 
-
+      lineinfile:
+        path: "{{ cron_allow_file }}"
+        line: "{{ item }}"
+        create: yes
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ authorized_cron_users }}"
+      when:
+        - cron_installed.rc == 0
+        - authorized_cron_users is defined
+        - authorized_cron_users | length > 0
 
     - name: CIS 5.1.8 - Verificar permisos finales de /etc/cron.allow
-          stat:
-            path: "{{ cron_allow_file }}"
-          register: cron_allow_final
-          when: cron_installed.rc == 0
-
+      stat:
+        path: "{{ cron_allow_file }}"
+      register: cron_allow_final
+      when: cron_installed.rc == 0
 
     - name: CIS 5.1.8 - Verificar que /etc/cron.deny no existe
-          stat:
-            path: "{{ cron_deny_file }}"
-          register: cron_deny_final
-          when: cron_installed.rc == 0
-
+      stat:
+        path: "{{ cron_deny_file }}"
+      register: cron_deny_final
+      when: cron_installed.rc == 0
 
     - name: CIS 5.1.8 - Listar contenido de /etc/cron.allow
-          command: cat {{ cron_allow_file }}
-          register: cron_allow_content
-          changed_when: false
-          when: cron_installed.rc == 0
-
+      command: cat {{ cron_allow_file }}
+      register: cron_allow_content
+      changed_when: false
+      when: cron_installed.rc == 0
 
     - name: CIS 5.1.8 - Verificar trabajos cron existentes
-          shell: |
-            echo "=== Crontabs del sistema ==="
-            ls -la /etc/cron.* 2>/dev/null | grep -v total || echo "No hay archivos cron del sistema"
-            echo ""
-            echo "=== Crontabs de usuarios ==="
-            ls -la /var/spool/cron/crontabs/ 2>/dev/null || ls -la /var/spool/cron/ 2>/dev/null || echo "No hay crontabs de usuarios"
-          register: existing_cron_jobs
-          changed_when: false
-          failed_when: false
-          when: cron_installed.rc == 0
+      shell: |
+        echo "=== Crontabs del sistema ==="
+        ls -la /etc/cron.* 2>/dev/null | grep -v total || echo "No hay archivos cron del sistema"
+        echo ""
+        echo "=== Crontabs de usuarios ==="
+        ls -la /var/spool/cron/crontabs/ 2>/dev/null || ls -la /var/spool/cron/ 2>/dev/null || echo "No hay crontabs de usuarios"
+      register: existing_cron_jobs
+      changed_when: false
+      failed_when: false
+      when: cron_installed.rc == 0
 
-
-        - name: CIS 5.1.8 - Mostrar resultado final
+    - name: CIS 5.1.8 - Mostrar resultado final
       debug:
         msg:
           - "========================================="
@@ -2139,14 +1916,12 @@
           - "- Los jobs pueden ejecutarse como cualquier usuario (via crontab -u)"
           - "========================================="
 
-
     - name: CIS 5.1.8 - Mostrar trabajos cron existentes
       debug:
         msg: "{{ existing_cron_jobs.stdout_lines }}"
-      when: 
+      when:
         - cron_installed.rc == 0
         - existing_cron_jobs.stdout is defined
-
 
     - name: CIS 5.1.8 - Advertencia si cron no está instalado
       debug:
@@ -2156,7 +1931,6 @@
           - "No se requiere acción"
           - "========================================="
       when: cron_installed.rc != 0
-
 
     - name: CIS 5.1.8 - Validación final
       assert:
@@ -2169,7 +1943,6 @@
         fail_msg: "CIS 5.1.8 - La configuración de cron no cumple con los requisitos"
         success_msg: "CIS 5.1.8 - La configuración de cron cumple con todos los requisitos"
       when: cron_installed.rc == 0
-
 
     - name: CIS 5.1.8 - Resumen de remediación
       debug:
@@ -2194,39 +1967,39 @@
           - "  - Monitorear intentos de acceso no autorizado"
           - "========================================="
 
-
     - name: CIS 5.1.9 - Verificar si at esta instalado
-        command: which at 
-        register: at_installed
-        changed_when: false
-        failed_when: false
+      command: which at
+      register: at_installed
+      changed_when: false
+      failed_when: false
 
+    - name: CIS 5.1.9 - verificar PAQUETE AT (Debian/Ubuntu)
+      command: dpkg -l at
+      register: at_package_deb
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family == "Debian"
 
-      - name: CIS 5.1.9 - verificar PAQUETE AT (Debian/Ubuntu)
-        command: dpkg -l at
-        register: at_package_deb
-        changed_when: false
-        failed_when: false
-        when: ansible_os_family == "Debian"
+    - name: CIS 5.1.9 - Verificar paquete at (RHEL/CentOS)
+      command: rpm -q at
+      register: at_package_rhel
+      changed_when: false
+      failed_when: false
+      when: ansible_os_family == "RedHat"
 
+    - name: CIS 5.1.9 - Verificar estado actual de /etc/at.deny
+      stat:
+        path: /etc/at.deny
+      register: at_deny_stat
 
-      - name: CIS 5.1.9 - Verificar paquete at (RHEL/CentOS)
-        command: rpm -q at
-        register: at_package_rhel
-        changed_when: false
-        failed_when: false
-        when: ansible_os_family == "RedHat"
+    - name: CIS 5.1.9 - Verificar estado actual de /etc/at.allow
+      stat:
+        path: /etc/at.allow
+      register: at_allow_stat
 
-
-      - name: CIS 5.1.9 - Verificar estado actual de /etc/at.deny
-        stat:
-          path: /etc/at.deny
-        register: at_deny_stat
-
-
-      - name: CIS 5.1.9 - Mostrar estado antes de remediar
-        debug:
-          msg:
+    - name: CIS 5.1.9 - Mostrar estado antes de remediar
+      debug:
+        msg:
           - "========================================="
           - "CIS 5.1.9 - Estado de at en el sistema"
           - "========================================="
@@ -2234,95 +2007,79 @@
           - "  Paquete at instalado: {{ 'Si' if (at_package_deb.rc == 0 or at_package_rhel.rc == 0) else 'No/No verificable' }}"
           - "  /etc/at.deny existe: {{ 'Si' if at_deny_stat.stat.exists else 'No' }}"
           - "  /etc/at.allow existe: {{ 'Si' if at_allow_stat.stat.exists else 'No' }}"
-        when: at_installed.rc == 0        
+      when: at_installed.rc == 0
 
+    - name: CIS 5.1.9 - Hacer backup de /etc/at.deny si existe
+      copy:
+        src: /etc/at.deny
+        dest: "/etc/at.deny.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when:
+        - at_installed.rc == 0
+        - at_deny_stat.stat.exists
 
-      - name: CIS 5.1.9 - Verificar estado actual de /etc/at.allow
-        stat:
-          path: /etc/at.allow
-        register: at_allow_stat
+    - name: CIS 5.1.9 - Hacer backup de /etc/at.allow si existe
+      copy:
+        src: /etc/at.allow
+        dest: "/etc/at.allow.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when:
+        - at_installed.rc == 0
+        - at_allow_stat.stat.exists
 
+    - name: CIS 5.1.9 - Eliminar /etc/at.deny
+      file:
+        path: /etc/at.deny
+        state: absent
+      when: at_installed.rc == 0
 
-      - name: CIS 5.1.9 - Hacer backup de /etc/at.deny si existe
-        copy:
-          src: /etc/at.deny
-          dest: "/etc/at.deny.backup.{{ ansible_date_time.epoch }}"
-          remote_src: yes
-        when:
-          - at_installed.rc == 0
-          - at_deny_stat.stat.exists
+    - name: CIS 5.1.9 - Crear /etc/at.allow si no existe
+      file:
+        path: /etc/at.allow
+        state: touch
+        modification_time: preserve
+        access_time: preserve
+      when: at_installed.rc == 0
 
+    - name: CIS 5.1.9 - Configurar permisos de /etc/at.allow (0600)
+      file:
+        path: /etc/at.allow
+        owner: root
+        group: root
+        mode: "0600"
+      when: at_installed.rc == 0
 
-      - name: CIS 5.1.9 - Hacer backup de /etc/at.allow si existe
-        copy:
-          src: /etc/at.allow
-          dest: "/etc/at.allow.backup.{{ ansible_date_time.epoch }}"
-          remote_src: yes
-        when:
-          - at_installed.rc == 0
-          - at_allow_stat.stat.exists
+    - name: CIS 5.1.9 - Agregar usuarios autorizados a /etc/at.allow
+      lineinfile:
+        path: /etc/at.allow
+        line: "{{ item }}"
+        create: yes
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ authorized_at_users }}"
+      when:
+        - at_installed.rc == 0
+        - authorized_at_users is defined
+        - authorized_at_users | length > 0
 
+    - name: CIS 5.1.9 - Verificar permisos finales de /etc/at.allow
+      stat:
+        path: /etc/at.allow
+      register: at_allow_final
+      when: at_installed.rc == 0
 
-      - name: CIS 5.1.9 - Eliminar /etc/at.deny
-        file:
-          path: /etc/at.deny
-          state: absent
-        when: at_installed.rc == 0
+    - name: CIS 5.1.9 - Verificar que /etc/at.deny no existe
+      stat:
+        path: /etc/at.deny
+      register: at_deny_final
+      when: at_installed.rc == 0
 
-
-      - name: CIS 5.1.9 - Crear /etc/at.allow si no existe
-        file:
-          path: /etc/at.allow
-          state: touch
-          modification_time: preserve
-          access_time: preserve
-        when: at_installed.rc == 0
-
-
-      - name: CIS 5.1.9 - Configurar permisos de /etc/at.allow (0600)
-        file:
-          path: /etc/at.allow
-          owner: root
-          group: root
-          mode: '0600'
-        when: at_installed.rc == 0
-
-
-      - name: CIS 5.1.9 - Agregar usuarios autorizados a /etc/at.allow
-        lineinfile:
-          path: /etc/at.allow
-          line: "{{ item }}"
-          create: yes
-          owner: root
-          group: root
-          mode: '0600'
-        loop: "{{ authorized_at_users }}"
-        when:
-          - at_installed.rc == 0
-          - authorized_at_users is defined
-          - authorized_at_users | length > 0
-
-
-      - name: CIS 5.1.9 - Verificar permisos finales de /etc/at.allow
-        stat:
-          path: /etc/at.allow
-        register: at_allow_final
-        when: at_installed.rc == 0
-
-
-      - name: CIS 5.1.9 - Verificar que /etc/at.deny no existe
-        stat:
-          path: /etc/at.deny
-        register: at_deny_final
-        when: at_installed.rc == 0
-
-
-      - name: CIS 5.1.9 - Listar contenido de /etc/at.allow
-        command: cat /etc/at.allow
-        register: at_allow_content
-        changed_when: false
-        when: at_installed.rc == 0
-
+    - name: CIS 5.1.9 - Listar contenido de /etc/at.allow
+      command: cat /etc/at.allow
+      register: at_allow_content
+      changed_when: false
+      when: at_installed.rc == 0
 
     - name: CIS 5.1.9 - Verificar trabajos at existentes
       shell: |
@@ -2335,7 +2092,6 @@
       changed_when: false
       failed_when: false
       when: at_installed.rc == 0
-
 
     - name: CIS 5.1.9 - Mostrar resultado final
       debug:
@@ -2367,14 +2123,12 @@
           - "========================================="
       when: at_installed.rc == 0
 
-
     - name: CIS 5.1.9 - Mostrar trabajos at existentes
       debug:
         msg: "{{ existing_at_jobs.stdout_lines }}"
-      when: 
+      when:
         - at_installed.rc == 0
         - existing_at_jobs.stdout is defined
-
 
     - name: CIS 5.1.9 - Advertencia si at no está instalado
       debug:
@@ -2384,7 +2138,6 @@
           - "No se requiere acción"
           - "========================================="
       when: at_installed.rc != 0
-
 
     - name: CIS 5.1.9 - Validación final
       assert:
@@ -2397,23 +2150,21 @@
         fail_msg: "CIS 5.1.9 - La configuración de at no cumple con los requisitos"
         success_msg: "CIS 5.1.9 - La configuración de at cumple con todos los requisitos"
       when: at_installed.rc == 0
-    
+
     - name: CIS 5.5.2 - Obtener UID_MIN de /etc/login.defs
       shell: awk '/^\s*UID_MIN/{print $2}' /etc/login.defs
-      register: uid_min 
+      register: uid_min
       changed_when: false
-
 
     - name: CIS 5.5.2 - Obtener ruta de nologin
       command: which nologin
       register: nologin_path
       changed_when: false
       failed_when: false
-    
+
     - name: CIS 5.5.2 - Establecer ruta de nologin por defecto si no existe
       set_fact:
         nologin_shell: "{{ nologin_path.stdout if nologin_path.rc == 0 else '/usr/sbin/nologin' }}"
-
 
     - name: CIS 5.5.2 - Auditar cuentas de sistema con shell válido
       shell: |
@@ -2422,7 +2173,7 @@
         $7!="{{ nologin_shell }}" && $7!="/bin/false" && $7!="/usr/bin/false") {print $1":"$3":"$7}' /etc/passwd
       register: system_accounts_with_shell
       changed_when: false
-    
+
     - name: CIS 5.5.2 - Auditar cuentas de sistema sin bloqueo
       shell: |
         awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1}' /etc/passwd | \
@@ -2432,20 +2183,17 @@
       changed_when: false
       failed_when: false
 
-
     - name: CIS 5.5.2 - Crear backup de /etc/passwd antes de modificar
       copy:
         src: /etc/passwd
         dest: "/etc/passwd.backup.{{ ansible_date_time.epoch }}"
         remote_src: yes
 
-
     - name: CIS 5.5.2 - Crear backup de /etc/shadow antes de modificar
       copy:
         src: /etc/shadow
         dest: "/etc/shadow.backup.{{ ansible_date_time.epoch }}"
         remote_src: yes
-
 
     - name: CIS 5.5.2 - Mostrar cuentas de sistema antes de remediar
       debug:
@@ -2467,196 +2215,178 @@
           - "  - /etc/shadow.backup.{{ ansible_date_time.epoch }}"
           - "========================================="
 
+    - name: CIS 5.5.2 - Establecer nologin shell para cuentas de sistema
+      shell: |
+        awk -F: '($1!="root" && $1!="sync" && $1!="shutdown" && $1!="halt" &&
+        $1!~/^\+/ && $3<{{ uid_min.stdout }} &&
+        $7!="{{ nologin_shell }}" && $7!="/bin/false" && $7!="/usr/bin/false") {print $1}' /etc/passwd | \
+        while read -r user; do
+          usermod -s "{{ nologin_shell }}" "$user"
+          echo "$user"
+        done
+      register: shell_changed
+      changed_when: shell_changed.stdout != ""
+    - name: CIS 5.5.2 - Bloquear cuentas de sistema
+      shell: |
+        awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1}' /etc/passwd | \
+        xargs -I '{}' passwd -S '{}' 2>/dev/null | \
+        awk '($2!="L" && $2!="LK") {print $1}' | \
+        while read -r user; do
+          usermod -L "$user"
+          echo "$user"
+        done
+      register: accounts_locked
+      changed_when: accounts_locked.stdout != ""
 
-      - name: CIS 5.5.2 - Establecer nologin shell para cuentas de sistema
-        shell: |
-          awk -F: '($1!="root" && $1!="sync" && $1!="shutdown" && $1!="halt" && 
-          $1!~/^\+/ && $3<{{ uid_min.stdout }} && 
-          $7!="{{ nologin_shell }}" && $7!="/bin/false" && $7!="/usr/bin/false") {print $1}' /etc/passwd | \
-          while read -r user; do 
-            usermod -s "{{ nologin_shell }}" "$user"
-            echo "$user"
-          done
-        register: shell_changed
-        changed_when: shell_changed.stdout != ""
-      - name: CIS 5.5.2 - Bloquear cuentas de sistema
-        shell: |
-          awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1}' /etc/passwd | \
-          xargs -I '{}' passwd -S '{}' 2>/dev/null | \
-          awk '($2!="L" && $2!="LK") {print $1}' | \
-          while read -r user; do 
-            usermod -L "$user"
-            echo "$user"
-          done
-        register: accounts_locked
-        changed_when: accounts_locked.stdout != ""
+    - name: CIS 5.5.2 - Verificar cuentas de sistema después de remediar
+      shell: |
+        awk -F: '($1!="root" && $1!="sync" && $1!="shutdown" && $1!="halt" &&
+        $1!~/^\+/ && $3<{{ uid_min.stdout }} &&
+        $7!="{{ nologin_shell }}" && $7!="/bin/false" && $7!="/usr/bin/false") {print $1":"$3":"$7}' /etc/passwd
+      register: remaining_shell_accounts
+      changed_when: false
 
+    - name: CIS 5.5.2 - Verificar cuentas sin bloqueo después de remediar
+      shell: |
+        awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1}' /etc/passwd | \
+        xargs -I '{}' passwd -S '{}' 2>/dev/null | \
+        awk '($2!="L" && $2!="LK") {print $1":"$2}'
+      register: remaining_unlocked_accounts
+      changed_when: false
+      failed_when: false
 
-      - name: CIS 5.5.2 - Verificar cuentas de sistema después de remediar
-        shell: |
-          awk -F: '($1!="root" && $1!="sync" && $1!="shutdown" && $1!="halt" && 
-          $1!~/^\+/ && $3<{{ uid_min.stdout }} && 
-          $7!="{{ nologin_shell }}" && $7!="/bin/false" && $7!="/usr/bin/false") {print $1":"$3":"$7}' /etc/passwd
-        register: remaining_shell_accounts
-        changed_when: false
+    - name: CIS 5.5.2 - Listar todas las cuentas de sistema y su estado
+      shell: |
+        echo "Usuario:UID:Shell:Estado_Password"
+        awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1":"$3":"$7}' /etc/passwd | \
+        while IFS=: read -r user uid shell; do
+          status=$(passwd -S "$user" 2>/dev/null | awk '{print $2}')
+          echo "$user:$uid:$shell:$status"
+        done
+      register: all_system_accounts_status
+      changed_when: false
 
+    - name: CIS 5.5.2 - Mostrar resultado de la remediación
+      debug:
+        msg:
+          - "========================================="
+          - "CIS 5.5.2 - Resultado de la remediación"
+          - "========================================="
+          - ""
+          - "Cuentas modificadas (shell cambiado a nologin):"
+          - "{{ shell_changed.stdout_lines if shell_changed.stdout != '' else ['  Ninguna - Ya estaban configuradas correctamente'] }}"
+          - ""
+          - "Cuentas bloqueadas:"
+          - "{{ accounts_locked.stdout_lines if accounts_locked.stdout != '' else ['  Ninguna - Ya estaban bloqueadas'] }}"
+          - ""
+          - "Verificación post-remediación:"
+          - "  Cuentas con shell válido restantes: {{ remaining_shell_accounts.stdout_lines | length }}"
+          - "  {{ remaining_shell_accounts.stdout_lines if remaining_shell_accounts.stdout_lines | length > 0 else ['  ✓ Ninguna'] }}"
+          - ""
+          - "  Cuentas sin bloqueo restantes: {{ remaining_unlocked_accounts.stdout_lines | length }}"
+          - "  {{ remaining_unlocked_accounts.stdout_lines if remaining_unlocked_accounts.stdout_lines | length > 0 else ['  ✓ Ninguna'] }}"
+          - "========================================="
 
-      - name: CIS 5.5.2 - Verificar cuentas sin bloqueo después de remediar
-        shell: |
-          awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1}' /etc/passwd | \
-          xargs -I '{}' passwd -S '{}' 2>/dev/null | \
-          awk '($2!="L" && $2!="LK") {print $1":"$2}'
-        register: remaining_unlocked_accounts
-        changed_when: false
-        failed_when: false
+    - name: CIS 5.5.2 - Mostrar estado completo de cuentas de sistema
+      debug:
+        msg: "{{ all_system_accounts_status.stdout_lines }}"
 
+    - name: CIS 5.5.2 - Validación final
+      assert:
+        that:
+          - remaining_shell_accounts.stdout_lines | length == 0
+          - remaining_unlocked_accounts.stdout_lines | length == 0
+        fail_msg: |
+          CIS 5.5.2 - FALLO: Aún existen cuentas de sistema sin asegurar
+          Cuentas con shell válido: {{ remaining_shell_accounts.stdout_lines | length }}
+          Cuentas sin bloqueo: {{ remaining_unlocked_accounts.stdout_lines | length }}
+        success_msg: "CIS 5.5.2 - ÉXITO: Todas las cuentas de sistema están aseguradas"
 
-      - name: CIS 5.5.2 - Listar todas las cuentas de sistema y su estado
-        shell: |
-          echo "Usuario:UID:Shell:Estado_Password"
-          awk -F: '($1!="root" && $1!~/^\+/ && $3<{{ uid_min.stdout }}) {print $1":"$3":"$7}' /etc/passwd | \
-          while IFS=: read -r user uid shell; do
-            status=$(passwd -S "$user" 2>/dev/null | awk '{print $2}')
-            echo "$user:$uid:$shell:$status"
-          done
-        register: all_system_accounts_status
-        changed_when: false
+    - name: CIS 5.7 - Verificar si pam_whell esta configurado en /etc/pam.d/su
+      command: grep -E '^\s*auth\s+required\s+pam_wheel.so\s+use_uid' /etc/pam.d/su
+      register: pam_whell_check
+      changed_when: false
+      failed_when: false
 
+    - name: CIS 5.7 - Verificar existencia del grupo wheel
+      command: getent group wheel
+      changed_when: false
+      failed_when: false
 
-      - name: CIS 5.5.2 - Mostrar resultado de la remediación
-        debug:
-          msg:
-            - "========================================="
-            - "CIS 5.5.2 - Resultado de la remediación"
-            - "========================================="
-            - ""
-            - "Cuentas modificadas (shell cambiado a nologin):"
-            - "{{ shell_changed.stdout_lines if shell_changed.stdout != '' else ['  Ninguna - Ya estaban configuradas correctamente'] }}"
-            - ""
-            - "Cuentas bloqueadas:"
-            - "{{ accounts_locked.stdout_lines if accounts_locked.stdout != '' else ['  Ninguna - Ya estaban bloqueadas'] }}"
-            - ""
-            - "Verificación post-remediación:"
-            - "  Cuentas con shell válido restantes: {{ remaining_shell_accounts.stdout_lines | length }}"
-            - "  {{ remaining_shell_accounts.stdout_lines if remaining_shell_accounts.stdout_lines | length > 0 else ['  ✓ Ninguna'] }}"
-            - ""
-            - "  Cuentas sin bloqueo restantes: {{ remaining_unlocked_accounts.stdout_lines | length }}"
-            - "  {{ remaining_unlocked_accounts.stdout_lines if remaining_unlocked_accounts.stdout_lines | length > 0 else ['  ✓ Ninguna'] }}"
-            - "========================================="
+    - name: CIS 5.7 - Verificar existencia del grupo wheel
+      command: getent group wheel
+      register: wheel_group_check
+      changed_when: false
+      failed_when: false
 
+    - name: CIS 5.7 - Crear backup de /etc/pam.d/su antes de modificar
+      copy:
+        src: /etc/pam.d/su
+        dest: "/etc/pam.d/su.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+      when: pam_wheel_check.rc != 0
 
-      - name: CIS 5.5.2 - Mostrar estado completo de cuentas de sistema
-        debug:
-          msg: "{{ all_system_accounts_status.stdout_lines }}"
+    - name: CIS 5.7 - Asegurar que pam_wheel.so esté configurado en /etc/pam.d/su
+      lineinfile:
+        path: /etc/pam.d/su
+        line: "auth required pam_wheel.so use_uid"
+        state: present
+        insertafter: "^#?auth"
+        create: no
+      when: pam_wheel_check.rc != 0
 
+    - name: CIS 5.7 - Asegurar que el grupo wheel existe
+      group:
+        name: "{{ item }}"
+        groups: wheel
+        append: yes
+      loop: "{{ authorized_su_users }}"
+      when:
+        - authorized_su_users is defined
+        - authorized_su_users | length > 0
 
-      - name: CIS 5.5.2 - Validación final
-        assert:
-          that:
-            - remaining_shell_accounts.stdout_lines | length == 0
-            - remaining_unlocked_accounts.stdout_lines | length == 0
-          fail_msg: |
-            CIS 5.5.2 - FALLO: Aún existen cuentas de sistema sin asegurar
-            Cuentas con shell válido: {{ remaining_shell_accounts.stdout_lines | length }}
-            Cuentas sin bloqueo: {{ remaining_unlocked_accounts.stdout_lines | length }}
-          success_msg: "CIS 5.5.2 - ÉXITO: Todas las cuentas de sistema están aseguradas"
+    - name: CIS 5.7 - Verificar usuarios del grupo wheel
+      command: getent group wheel
+      register: wheel_group_final
+      changed_when: false
 
+    - name: CIS 5.7 - Validación final
+      assert:
+        that:
+          - "'pam_wheel.so' in lookup('file', '/etc/pam.d/su')"
+          - wheel_group_final.stdout is search("wheel:")
+        fail_msg: "CIS 5.7 - FALLO: El acceso a su no está restringido correctamente"
+        success_msg: "CIS 5.7 - ÉXITO: El acceso a su está restringido al grupo wheel"
 
-      - name: CIS 5.7 - Verificar si pam_whell esta configurado en /etc/pam.d/su
-        command: grep -E '^\s*auth\s+required\s+pam_wheel.so\s+use_uid' /etc/pam.d/su
-        register: pam_whell_check
-        changed_when: false
-        failed_when: false
+    - name: CIS 5.7 - Mostrar resultado final
+      debug:
+        msg:
+          - "========================================="
+          - "CIS 5.7 - Restricción del comando su"
+          - "========================================="
+          - "pam_wheel configurado: {{ 'SI' if pam_wheel_check.rc == 0 else 'APLICADO' }}"
+          - "Grupo wheel: {{ wheel_group_final.stdout }}"
+          - ""
+          - "IMPORTANTE:"
+          - "- Solo usuarios del grupo wheel pueden usar su"
+          - "- Se recomienda usar sudo para control y auditoría"
+          - "========================================="
 
+    - name: CIS 6.1.10 - Obtener puntos de montaje locales
+      shell: df --local -P | awk 'NR!=1 {print $6}'
+      register: local_mounts
+      changed_when: false
 
-      - name: CIS 5.7 - Verificar existencia del grupo wheel 
-        command: getent group wheel
-        changed_when: false
-        failed_when: false
+    - name: CIS 6.1.10 - Buscar archivos world-writable en FS locales
+      shell: |
+        for mount in {{ local_mounts.stdout_lines | join(' ') }}; do
+          find "$mount" -xdev -type f -perm -0002 2>/dev/null
+        done
+      register: world_writable_files
+      changed_when: false
+      failed_when: false
 
-
-      - name: CIS 5.7 - Verificar existencia del grupo wheel
-        command: getent group wheel
-        register: wheel_group_check
-        changed_when: false
-        failed_when: false
-      
-      - name: CIS 5.7 - Crear backup de /etc/pam.d/su antes de modificar
-        copy:
-          src: /etc/pam.d/su
-          dest: "/etc/pam.d/su.backup.{{ ansible_date_time.epoch }}"
-          remote_src: yes
-        when: pam_wheel_check.rc != 0
-      
-      - name: CIS 5.7 - Asegurar que pam_wheel.so esté configurado en /etc/pam.d/su
-        lineinfile:
-           path: /etc/pam.d/su
-           line: "auth required pam_wheel.so use_uid"
-           state: present
-           insertafter: '^#?auth'
-           create: no
-        when: pam_wheel_check.rc != 0
-
-
-      - name: CIS 5.7 - Asegurar que el grupo wheel existe
-        group:
-          name: "{{ item }}"
-          groups: wheel
-          append: yes
-        loop: "{{ authorized_su_users }}"
-        when:
-          - authorized_su_users is defined
-          - authorized_su_users | length > 0
-
-
-      - name: CIS 5.7 - Verificar usuarios del grupo wheel
-        command: getent group wheel
-        register: wheel_group_final
-        changed_when: false
-
-
-      - name: CIS 5.7 - Validación final
-        assert:
-          that: 
-            - "'pam_wheel.so' in lookup('file', '/etc/pam.d/su')"
-            - wheel_group_final.stdout is search("wheel:")
-          fail_msg: "CIS 5.7 - FALLO: El acceso a su no está restringido correctamente"
-          success_msg: "CIS 5.7 - ÉXITO: El acceso a su está restringido al grupo wheel"
-
-
-      - name: CIS 5.7 - Mostrar resultado final
-        debug:
-          msg:
-            - "========================================="
-            - "CIS 5.7 - Restricción del comando su"
-            - "========================================="
-            - "pam_wheel configurado: {{ 'SI' if pam_wheel_check.rc == 0 else 'APLICADO' }}"
-            - "Grupo wheel: {{ wheel_group_final.stdout }}"
-            - ""
-            - "IMPORTANTE:"
-            - "- Solo usuarios del grupo wheel pueden usar su"
-            - "- Se recomienda usar sudo para control y auditoría"
-            - "========================================="
-            
-      - name: CIS 6.1.10 - Obtener puntos de montaje locales
-        shell: df --local -P | awk 'NR!=1 {print $6}'
-        register: local_mounts
-        changed_when: false
-
-
-      - name: CIS 6.1.10 - Buscar archivos world-writable en FS locales
-        shell: |
-          for mount in {{ local_mounts.stdout_lines | join(' ') }}; do
-            find "$mount" -xdev -type f -perm -0002 2>/dev/null
-          done
-        register: world_writable_files
-        changed_when: false
-        failed_when: false
-
-
-
-
-      - name: CIS 6.1.10 - Mostrar archivos world-writable encontrados
+    - name: CIS 6.1.10 - Mostrar archivos world-writable encontrados
       debug:
         msg:
           - "========================================="
@@ -2664,7 +2394,6 @@
           - "========================================="
           - "{{ world_writable_files.stdout_lines if world_writable_files.stdout_lines | length > 0 else ['✓ Ninguno encontrado'] }}"
           - "========================================="
-
 
     - name: CIS 6.1.10 - Remover permiso write para others (chmod o-w)
       file:
@@ -2674,7 +2403,6 @@
       when:
         - cis_6_1_10_remediate | bool
         - world_writable_files.stdout_lines | length > 0
-
 
     - name: CIS 6.1.10 - Re-verificar archivos world-writable después de remediar
       shell: |
@@ -2686,368 +2414,335 @@
       failed_when: false
       when: cis_6_1_10_remediate | bool
 
-
     - name: CIS 6.1.10 - Validación final
       assert:
         that:
           - world_writable_files.stdout_lines | length == 0 or (cis_6_1_10_remediate | bool and world_writable_files_final.stdout_lines | length == 0)
         fail_msg: "CIS 6.1.10 - FALLO: Existen archivos world-writable en el sistema"
         success_msg: "CIS 6.1.10 - ÉXITO: No existen archivos world-writable"
-       
+
     - name: CIS 6.2.7 - Auditar la integridad del PATH de root
-         shell: | 
-           issues=0
-           if echo "$PATH" | grep -q "::"; then
-             echo "Empty directory (::) in PATH"
-             issues=1
-           fi
+      shell: |
+        issues=0
+        if echo "$PATH" | grep -q "::"; then
+          echo "Empty directory (::) in PATH"
+          issues=1
+        fi
 
 
-           if echo "$PATH" | grep -q ":$"; then
-             echo "Trailing ':' in PATH"
-             issues=1
-           fi 
+        if echo "$PATH" | grep -q ":$"; then
+          echo "Trailing ':' in PATH"
+          issues=1
+        fi
 
 
-           for dir in $(echo "$PATH" | tr ":" " "); do
-             if [ -d "$dir" ]; then
-                stat=$(ls -ldH "$dir")
-                owner=$(echo "$stat" | awk '{print $3}')
-                perms=$(echo "$stat" | awk '{print $1}')
-                
-                [ "$dir" = "." ] && echo "PATH contains current working directory (.)" && issues=1
-                [ "$owner" != "root" ] && echo "$dir is not owned by root" && issues=1
-                [ "${perms:5:1}" != "-" ] && echo "$dir is group writable" && issues=1
-                [ "${perms:8:1}" != "-" ] && echo "$dir is world writable" && issues=1
-              else 
-                echo "$dir is not a directory"
-                issues=1
-              fi
-            done
+        for dir in $(echo "$PATH" | tr ":" " "); do
+          if [ -d "$dir" ]; then
+            stat=$(ls -ldH "$dir")
+            owner=$(echo "$stat" | awk '{print $3}')
+            perms=$(echo "$stat" | awk '{print $1}')
+            [ "$dir" = "." ] && echo "PATH contains current working directory (.)" && issues=1
+            [ "$owner" != "root" ] && echo "$dir is not owned by root" && issues=1
+            [ "${perms:5:1}" != "-" ] && echo "$dir is group writable" && issues=1
+            [ "${perms:8:1}" != "-" ] && echo "$dir is world writable" && issues=1
+          else
+            echo "$dir is not a directory"
+            issues=1
+          fi
+        done
 
 
-            exit $issues
-          register: root_path_audit
-          changed_when: false
-          failed_when: false
-
+        exit $issues
+      register: root_path_audit
+      changed_when: false
+      failed_when: false
 
     - name: CIS 6.2.7 - Mostrar resultado del PATH de root
       debug:
-           msg:
-             - "========================================="
-             - "CIS 6.2.7 - Root PATH Integrity"
-             - "========================================="
-             - "{{ root_path_audit.stdout_lines if root_path_audit.stdout_lines | length > 0 else ['✓ PATH de root es seguro'] }}"
-             - "========================================="
-
+        msg:
+          - "========================================="
+          - "CIS 6.2.7 - Root PATH Integrity"
+          - "========================================="
+          - "{{ root_path_audit.stdout_lines if root_path_audit.stdout_lines | length > 0 else ['✓ PATH de root es seguro'] }}"
+          - "========================================="
 
     - name: CIS 6.2.8 - Crear home directories faltantes
       shell: |
-           awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin/ &&
-           $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
-           while read -r user dir; do
-             if [ ! -d "$dir" ]; then
-               echo "Creando home para $user en $dir"
-               mkdir -p "$dir"
-               chmod -p "$dir"
-               chmod g-w,o-wrx "$dir"
-               chown "$user" "$dir"
-              fi
-            done
-          register: home_dirs_created
-          changed_when: home_dirs_created.stdout != ""
-
+        awk -F: '($1!~/(halt|sync|shutdown|nfsnobody)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin/ &&
+        $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
+        while read -r user dir; do
+          if [ ! -d "$dir" ]; then
+            echo "Creando home para $user en $dir"
+            mkdir -p "$dir"
+            chmod g-w,o-wrx "$dir"
+            chown "$user" "$dir"
+          fi
+        done
+      register: home_dirs_created
+      changed_when: home_dirs_created.stdout != ""
 
     - name: CIS 6.2.8 - Mostrar homes creados
       debug:
-           msg: "{{ home_dirs_created.stdout_lines if home_dirs_created.stdout != '' else ['✓ Todos los home directories existen'] }}"
-       
+        msg: "{{ home_dirs_created.stdout_lines if home_dirs_created.stdout != '' else ['✓ Todos los home directories existen'] }}"
+
     - name: CIS 6.2.9 - Asegurar ownership correcto de home directories
       shell: |
-           awk -F: '($1!~/(halt|sync|shutdown)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin/ &&
-           $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |  
-           while read -r user dir; do
-             if [ ! -d "$dir" ]; then
-               echo "Home no existe para $user, creando $dir"
-               mkdir -p "$dir"
-               chmod g-w,o-rwx "$dir"
-               chown "$user" "$dir"
-             else
-               owner=$(stat -L -c "%U" "$dir")
-               if [ "$owner" != "$user" ]; then
-                 echo "Corrigiendo ownership de $dir (era $owner)"
-                 chmod g-w,o-rwx "$dir"
-                 chown "$user" "$dir"
-               fi
-              fi
-            done
-          register: home_ownership_fixed 
-          changed_when: home_ownership_fixed.stdout != ""
-
+        awk -F: '($1!~/(halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin/ &&
+        $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
+        while read -r user dir; do
+          if [ ! -d "$dir" ]; then
+            echo "Home no existe para $user, creando $dir"
+            mkdir -p "$dir"
+            chmod g-w,o-rwx "$dir"
+            chown "$user" "$dir"
+          else
+            owner=$(stat -L -c "%U" "$dir")
+            if [ "$owner" != "$user" ]; then
+              echo "Corrigiendo ownership de $dir (era $owner)"
+              chmod g-w,o-rwx "$dir"
+              chown "$user" "$dir"
+            fi
+          fi
+        done
+      register: home_ownership_fixed
+      changed_when: home_ownership_fixed.stdout != ""
 
     - name: CIS 6.2.9 - Mostrar cambios de ownership
       debug:
-           msg: "{{ home_ownership_fixed.stdout_lines if home_ownership_fixed.stdout != '' else ['✓ Ownership de home directories correcto'] }}"
-
+        msg: "{{ home_ownership_fixed.stdout_lines if home_ownership_fixed.stdout != '' else ['✓ Ownership de home directories correcto'] }}"
 
     - name: CIS 6.2.10 - Auditar permisos de home directories
       shell: |
-           awk -F: '($1!~/(halt|sync|shutdown)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin/ &&
-           $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
-           while read -r user dir; do
-             if [ ! -d "$dir" ]; then
-               echo "User \"$user\" home directory \"$dir\" does not exist"
-             else
-               perm=$(stat -L -c "%A %a" "$dir")
-               sym=$(echo "$perm" | awk '{print $1}')
-               num=$(echo "$perm" | awk '{print $2}')
-
-
-               
-               if [ "${sym:5:1}" != "-" ] || \
-                  [ "${sym:5:1}" != "-" ] || \
-                  [ "${sym:5:1}" != "-" ] || \
-                  [ "${sym:9:1}" != "-" ]; then
-                 echo "User \"$user\" home \"$dir\" has permissions \"$num\""
-               fi 
-             fi 
-           done 
-         register: home_perm_audit
-         changed_when: false
-         failed_when: false
-
-
-
+        awk -F: '($1!~/(halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin/ &&
+        $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
+        while read -r user dir; do
+          if [ ! -d "$dir" ]; then
+            echo "User \"$user\" home directory \"$dir\" does not exist"
+          else
+            perm=$(stat -L -c "%A %a" "$dir")
+            sym=$(echo "$perm" | awk '{print $1}')
+            num=$(echo "$perm" | awk '{print $2}')
+            if [ "${sym:5:1}" != "-" ] || \
+               [ "${sym:6:1}" != "-" ] || \
+               [ "${sym:7:1}" != "-" ] || \
+               [ "${sym:8:1}" != "-" ] || \
+               [ "${sym:9:1}" != "-" ]; then
+              echo "User \"$user\" home \"$dir\" has permissions \"$num\""
+            fi
+          fi
+        done
+      register: home_perm_audit
+      changed_when: false
+      failed_when: false
 
     - name: CIS 6.2.10 - Mostrar permisos inseguros detectados
       debug:
-           msg:
-             - "========================================="
-             - "CIS 6.2.10 - Permisos de home directories"
-             - "========================================="
-             - "{{ home_perm_audit.stdout_lines if home_perm_audit.stdout_lines | length > 0 else ['✓ Todos los home directories cumplen (<=750)'] }}"
-             - "========================================="
-
+        msg:
+          - "========================================="
+          - "CIS 6.2.10 - Permisos de home directories"
+          - "========================================="
+          - "{{ home_perm_audit.stdout_lines if home_perm_audit.stdout_lines | length > 0 else ['✓ Todos los home directories cumplen (<=750)'] }}"
+          - "========================================="
 
     - name: CIS 6.2.10 - Remediar permisos de home directories a 750
       file:
-           path: "{{ item.split('\"')[3] }}"
-           mode: "0750"
-         loop: "{{ home_perm_audit.stdout_lines }}"
-         when:
-           - cis_6_1_10_remediate | bool
-           - home_perm_audit.stdout_lines | length > 0
-
+        path: '{{ item.split(''"'')[3] }}'
+        mode: "0750"
+      loop: "{{ home_perm_audit.stdout_lines }}"
+      when:
+        - cis_6_1_10_remediate | bool
+        - home_perm_audit.stdout_lines | length > 0
 
     - name: CIS 6.2.10 - Re-verificar permisos despues de remediar
       shell: |
-           awk -F: '($1!~/(halt|sync|shutdown)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin/ &&
-           $7!~/(\/usr)?\/bin\/false/) { print $6 }' /etc/passwd |
-           while read -r dir; do
-             if [ -d "$dir" ]; then
-               stat -L -c "%a %n" "$dir"
-             fi 
-           done
-          register: home_perm_final
-          changed_when: false
-          when: cis_6_2_10_remediate | bool
-
+        awk -F: '($1!~/(halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin/ &&
+        $7!~/(\/usr)?\/bin\/false/) { print $6 }' /etc/passwd |
+        while read -r dir; do
+          if [ -d "$dir" ]; then
+            stat -L -c "%a %n" "$dir"
+          fi
+        done
+      register: home_perm_final
+      changed_when: false
+      when: cis_6_2_10_remediate | bool
 
     - name: CIS 6.2.10 - Validación final
       assert:
-           that:
-             - home_perm_audit.stdout_lines | length > 0
-               or 
-               (cis_6_2_10_remediate | bool)
-           fail_msg: "CIS 6.2.10 - FALLO: Existen home directories con permisos inseguros"
-           success_msg: "CIS 6.2.10 - ÉXITO: Permisos de home directories cumplen con <= 750"
-    
-    
-      - name: CIS 6.2.11 - Auditar permisos de dot files de usuarios
-        shell: |
-          awk -F: '($1!~/(halt|sync|shutdown)/ &&
-          $7!~/^(\/usr)?\/sbin\/nologin/ &&
-          $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
-          while read -r user dir; do
-            if [ -d "$dir" ]; then
-              for file in "$dir"/.*; do
-                if [ -f "$file" ] && [ ! -h "$file" ]; then
-                  perm=$(stat -L -c "%A" "$file")
-                  if [ "${perm:5:1}" != "-" ] || [ "${perm:8:1}" != "-" ]; then
-                    echo "User \"$user\" dot file \"$file\" has permissions \"$perm\""
-                  fi 
-                fi 
-              done
-            fi 
-          done 
-        register: dotfiles_audit
-        changed_when: false
-        failed_when: false
-      
-      - name: CIS 6.2.11 - Mostrar dot files con permisos inseguros
-        debug:
-          msg:
-            - "========================================="
-            - "CIS 6.2.11 - Dot files con permisos inseguros"
-            - "========================================="
-            - "{{ dotfiles_audit.stdout_lines if dotfiles_audit.stdout_lines | length > 0 else ['✓ Todos los dot files cumplen'] }}"
-            - "========================================="
+        that:
+          - home_perm_audit.stdout_lines | length > 0
+            or
+            (cis_6_2_10_remediate | bool)
+        fail_msg: "CIS 6.2.10 - FALLO: Existen home directories con permisos inseguros"
+        success_msg: "CIS 6.2.10 - ÉXITO: Permisos de home directories cumplen con <= 750"
 
+    - name: CIS 6.2.11 - Auditar permisos de dot files de usuarios
+      shell: |
+        awk -F: '($1!~/(halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin/ &&
+        $7!~/(\/usr)?\/bin\/false/) { print $1 " " $6 }' /etc/passwd |
+        while read -r user dir; do
+          if [ -d "$dir" ]; then
+            for file in "$dir"/.*; do
+              if [ -f "$file" ] && [ ! -h "$file" ]; then
+                perm=$(stat -L -c "%A" "$file")
+                if [ "${perm:5:1}" != "-" ] || [ "${perm:8:1}" != "-" ]; then
+                  echo "User \"$user\" dot file \"$file\" has permissions \"$perm\""
+                fi
+              fi
+            done
+          fi
+        done
+      register: dotfiles_audit
+      changed_when: false
+      failed_when: false
+
+    - name: CIS 6.2.11 - Mostrar dot files con permisos inseguros
+      debug:
+        msg:
+          - "========================================="
+          - "CIS 6.2.11 - Dot files con permisos inseguros"
+          - "========================================="
+          - "{{ dotfiles_audit.stdout_lines if dotfiles_audit.stdout_lines | length > 0 else ['✓ Todos los dot files cumplen'] }}"
+          - "========================================="
 
     - name: CIS 6.2.11 - Remediar permisos de dot files (chmod go-w)
       file:
-           path: "{{ item.split('\"')[3] }}"
-           mode: "u=rwX,go=rX"
-         loop: "{{ dotfiles_audit.stdout_lines }}"
-         when:
-           - cis_6_2_11_remediate | bool
-           - dotfiles_audit.stdout_lines | length > 0
-
+        path: '{{ item.split(''"'')[3] }}'
+        mode: "u=rwX,go=rX"
+      loop: "{{ dotfiles_audit.stdout_lines }}"
+      when:
+        - cis_6_2_11_remediate | bool
+        - dotfiles_audit.stdout_lines | length > 0
 
     - name: CIS 6.2.11 - Re-verificar dot files después de remediar
       shell: |
-           awk -F: '($1!~/(halt|sync|shutdown)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin/ &&
-           $7!~/(\/usr)?\/bin\/false/) { print $6 }' /etc/passwd |
-           while read -r dir; do
-             if [ -d "$dir" ]; then
-               find "$dir"/.* -maxdepth 0 -type f ! -perm -0020 ! -perm -0002 2>/dev/null
-              fi 
-            done 
-          register: dotfiles_final
-          changed_when: false 
-          when: cis_6_2_11_remediate | bool
-
+        awk -F: '($1!~/(halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin/ &&
+        $7!~/(\/usr)?\/bin\/false/) { print $6 }' /etc/passwd |
+        while read -r dir; do
+          if [ -d "$dir" ]; then
+            find "$dir"/.* -maxdepth 0 -type f ! -perm -0020 ! -perm -0002 2>/dev/null
+          fi
+        done
+      register: dotfiles_final
+      changed_when: false
+      when: cis_6_2_11_remediate | bool
 
     - name: CIS 6.2.11 - Validación final
       assert:
-           that:
-             - dotfiles_audit.stdout_lines
-               or 
-               (cis_6_2_11_remediate | bool)
-           fail_msg: "CIS 6.2.11 - FALLO: Existen dot files con permisos inseguros"
-           success_msg: "CIS 6.2.11 - ÉXITO: Dot files cumplen permisos seguros"
-
+        that:
+          - dotfiles_audit.stdout_lines
+            or
+            (cis_6_2_11_remediate | bool)
+        fail_msg: "CIS 6.2.11 - FALLO: Existen dot files con permisos inseguros"
+        success_msg: "CIS 6.2.11 - ÉXITO: Dot files cumplen permisos seguros"
 
     - name: 6.2.12 | Check for .forward files in users home directories
       ansible.builtin.shell: |
-           awk -F: '($1!~/(root|halt|sync|shutdown)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ &&
-           $7!~/(\/usr)?\/bin\/false(\/)?$/) { print $1 " " $6 }' /etc/passwd | \
-           while read -r user dir; do
-             if [ -d "$dir" ]; then
-               file="$dir/.forward"
-               if [ ! -h "$file" ] && [ -f "$file" ]; then
-                 echo "User: \"$user\" file: \"$file\" exists"
-               fi
-              fi 
-            done 
-register: forward_files_check
-          changed_when: false
-          failed_when: false
-
+        awk -F: '($1!~/(root|halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ &&
+        $7!~/(\/usr)?\/bin\/false(\/)?$/) { print $1 " " $6 }' /etc/passwd | \
+        while read -r user dir; do
+          if [ -d "$dir" ]; then
+            file="$dir/.forward"
+            if [ ! -h "$file" ] && [ -f "$file" ]; then
+              echo "User: \"$user\" file: \"$file\" exists"
+            fi
+          fi
+        done
+      register: forward_files_check
+      changed_when: false
+      failed_when: false
 
     - name: 6.2.12 | Report .forward files found (if any)
       ansible.builtin.debug:
         msg: "{{ forward_files_check.stdout_lines }}"
       when: forward_files_check.stdout != ""
 
-
     - name: 6.2.13 | Check for .netrc files and permissions
       ansible.builtin.shell: |
-           awk -F: '($1!~/(halt|sync|shutdown)/ &&
-           $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ &&
-           $7!~/(\/usr)?\/bin\/false(\/)?$/) { print $1 " " $6 }' /etc/passwd | \
-           while read -r user dir; do
-             if [ -d "$dir" ]; then
-               file="$dir/.netrc"
-               if [ ! -h "$file" ] && [ -f "$file" ]; then
-                 perm=$(stat -L -c "%a" "$file")
-                 if stat -L -c "%A" "$file" | cut -c4-10 | grep -Eq '[^-]+'; then
-                   echo "FAILED: User: \"$user\" file: \"$file\" exists with permissions: \"$perm\""
-                 else 
-                   echo "WARNING: User: \"$user\" file: \"$file\" exists with permissions: \"$perm\""
-                 fi 
-                fi 
-               fi 
-            done
-          register: netrc_files
-          changed_when: false
-       
+        awk -F: '($1!~/(halt|sync|shutdown)/ &&
+        $7!~/^(\/usr)?\/sbin\/nologin(\/)?$/ &&
+        $7!~/(\/usr)?\/bin\/false(\/)?$/) { print $1 " " $6 }' /etc/passwd | \
+        while read -r user dir; do
+          if [ -d "$dir" ]; then
+            file="$dir/.netrc"
+            if [ ! -h "$file" ] && [ -f "$file" ]; then
+              perm=$(stat -L -c "%a" "$file")
+              if stat -L -c "%A" "$file" | cut -c4-10 | grep -Eq '[^-]+'; then
+                echo "FAILED: User: \"$user\" file: \"$file\" exists with permissions: \"$perm\""
+              else
+                echo "WARNING: User: \"$user\" file: \"$file\" exists with permissions: \"$perm\""
+              fi
+            fi
+          fi
+        done
+      register: netrc_files
+      changed_when: false
+
     - name: 6.2.13 | Fail if insecure .netrc files exist
       ansible.builtin.fail:
-           msg: "{{ netrc_files.stdout_lines }}"
-         when: netrc_files.stdout is search('FAILED:')
-        
+        msg: "{{ netrc_files.stdout_lines }}"
+      when: netrc_files.stdout is search('FAILED:')
+
     - name: 6.2.13 | Report .netrc files with secure permissions (warning only)
       ansible.builtin.debug:
-           msg: "{{ netrc_files.stdout_lines }}"
-         when:
-           - netrc_files.stdout != ""
-           - netrc_files.stdout is not search('FAILED:')
-
+        msg: "{{ netrc_files.stdout_lines }}"
+      when:
+        - netrc_files.stdout != ""
+        - netrc_files.stdout is not search('FAILED:')
 
     - name: 6.2.16 | Check for duplicate UIDs
       ansible.builtin.shell: |
-           cut -f3 -d":" /etc/passwd | sort -n | uniq -c | awk '$1 > 1 {print}'
-         register: duplicate_uids
-         changed_when: false
-         failed_when: duplicate_uids.stdout != ""
-      
+        cut -f3 -d":" /etc/passwd | sort -n | uniq -c | awk '$1 > 1 {print}'
+      register: duplicate_uids
+      changed_when: false
+      failed_when: duplicate_uids.stdout != ""
+
     - name: 6.2.16 | Report duplicate UIDs (if any)
       ansible.builtin.debug:
-           msg: "Duplicate UIDs detected: {{ duplicate_uids.stdout }}"
-         when: duplicate_uids.stdout != ""
-
-
-
+        msg: "Duplicate UIDs detected: {{ duplicate_uids.stdout }}"
+      when: duplicate_uids.stdout != ""
 
     - name: 6.2.17 | Check for duplicate GIDs
       ansible.builtin.shell: |
-           cut -d: -f3 /etc/group | sort -n | uniq -c | awk '$1 > 1 {print}'
-         register: duplicate_gids
-         changed_when: false
-         failed_when: duplicate_gids.stdout != ""
-       
+        cut -d: -f3 /etc/group | sort -n | uniq -c | awk '$1 > 1 {print}'
+      register: duplicate_gids
+      changed_when: false
+      failed_when: duplicate_gids.stdout != ""
+
     - name: 6.2.17 | Report duplicate GIDs (if any)
       ansible.builtin.debug:
-           msg: "Duplicate GIDs detected: {{ duplicate_gids.stdout }}"
-         when: duplicate_gids.stdout != ""
-
+        msg: "Duplicate GIDs detected: {{ duplicate_gids.stdout }}"
+      when: duplicate_gids.stdout != ""
 
     - name: 6.2.18 | Check for duplicate user names
       ansible.builtin.shell: |
-           cut -d: -f1 /etc/passwd | sort | uniq -d
-         register: duplicate_usernames
-         changed_when: false
-         failed_when: duplicate_usernames.stdout != ""
-
+        cut -d: -f1 /etc/passwd | sort | uniq -d
+      register: duplicate_usernames
+      changed_when: false
+      failed_when: duplicate_usernames.stdout != ""
 
     - name: 6.2.18 | Report duplicate user names (if any)
       ansible.builtin.debug:
-           msg: "Duplicate user names detected in /etc/passwd: {{ duplicate_usernames.stdout_lines }}"
-         when: duplicate_usernames.stdout != ""
-       
+        msg: "Duplicate user names detected in /etc/passwd: {{ duplicate_usernames.stdout_lines }}"
+      when: duplicate_usernames.stdout != ""
+
     - name: 6.2.19 | Check for duplicate group names
       ansible.builtin.shell: |
-           cut -d: -f1 /etc/group | sort | uniq -d 
-         register: duplicate_groupnames
-         changed_when: false
-         failed_when: duplicate_groupnames.stdout != ""
-      
+        cut -d: -f1 /etc/group | sort | uniq -d
+      register: duplicate_groupnames
+      changed_when: false
+      failed_when: duplicate_groupnames.stdout != ""
+
     - name: 6.2.19 | Report duplicate group names (if any)
       ansible.builtin.debug:
-           msg: "Duplicate group names detected in /etc/group: {{ duplicate_groupnames.stdout_lines }}"
-         when: duplicate_groupnames.stdout != ""
-
-
-       
-
+        msg: "Duplicate group names detected in /etc/group: {{ duplicate_groupnames.stdout_lines }}"
+      when: duplicate_groupnames.stdout != ""
 
     - name: 6.2.15 | Ensure all groups in /etc/passwd exist in /etc/group (Automated)
       shell: |
@@ -3062,7 +2757,6 @@ register: forward_files_check
       changed_when: false
       failed_when: false
 
-
     - name: 6.2.15 | Report missing groups (if any)
       debug:
         msg:
@@ -3072,14 +2766,12 @@ register: forward_files_check
           - "{{ missing_groups.stdout_lines if missing_groups.stdout_lines | length > 0 else ['✓ Todos los grupos de /etc/passwd existen en /etc/group'] }}"
           - "========================================="
 
-
     - name: 6.2.15 | Fail if missing groups detected
       fail:
         msg: "FALLO: Existen GIDs en /etc/passwd que no están en /etc/group"
       when:
         - missing_groups.stdout_lines is defined
         - missing_groups.stdout_lines | length > 0
-
 
     - name: Resumen de Remediación - CIS Benchmark RHEL 6
       debug:
