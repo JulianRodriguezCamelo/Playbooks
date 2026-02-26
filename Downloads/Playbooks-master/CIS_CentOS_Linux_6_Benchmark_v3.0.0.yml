@@ -29,11 +29,6 @@
 
   tasks:
 
-# =============================================================================
-# 1.2.1 — Ensure package manager repositories are configured (Manual)
-# CIS Controls v7: 3.4, 3.5
-# =============================================================================
-
     - name: "AUDIT | 1.2.1 | Obtener lista de repositorios activos"
       ansible.builtin.command: yum repolist
       register: cis_1_2_1_repos
