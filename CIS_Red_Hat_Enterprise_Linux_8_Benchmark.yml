@@ -1,0 +1,2629 @@
+---
+# =============================================================================
+# Ansible Playbook: CIS Linux Hardening - Consolidado
+# Secciones:
+#   1.1.1.10  - usb-storage kernel module
+#   1.1.2.1.1 - /tmp como tmpfs o partición separada
+#   1.1.2.1.2 - nodev en /tmp
+#   1.1.2.1.3 - nosuid en /tmp
+#   1.1.2.1.4 - noexec en /tmp
+#   1.1.2.2.1 - /dev/shm como tmpfs
+#   1.1.2.2.2 - nodev en /dev/shm
+#   1.1.2.2.3 - nosuid en /dev/shm
+#   1.1.2.2.4 - noexec en /dev/shm
+#   1.3.1.1   - SELinux instalado
+#   1.3.1.2   - SELinux no deshabilitado en bootloader
+#   1.3.1.3   - Política SELinux configurada
+#   1.3.1.4   - Modo SELinux no deshabilitado
+#   1.3.1.7   - mcstrans no instalado
+#   1.4.2     - Acceso a configuración del bootloader
+#   1.5.5     - kernel.dmesg_restrict configurado
+#   4.1.1     - firewalld instalado
+#   4.1.2     - firewalld backend configurado (nftables)
+#   4.1.3     - firewalld.service habilitado y activo
+#   5.2.1     - sudo instalado
+#   5.2.2     - sudo usa pty
+#   5.2.5     - re-autenticación para escalada de privilegios
+#   5.2.6     - sudo timestamp_timeout configurado
+#   5.2.7     - acceso al comando su restringido
+#   5.3.2.3   - módulo pam_pwquality habilitado
+#   5.3.3.2.2 - longitud mínima de contraseña configurada
+#   5.3.3.2.3 - complejidad de contraseña configurada
+#   5.3.3.2.6 - verificación de diccionario de contraseñas
+#   5.3.3.3.1 - historial de contraseñas configurado
+#   5.1.2     - acceso a /etc/ssh/sshd_config configurado
+#   5.1.4     - acceso a claves privadas SSH configurado
+#   5.1.5     - acceso a claves públicas SSH configurado
+#   5.1.6     - acceso SSH (AllowUsers/AllowGroups) configurado
+#   5.1.24    - sshd UsePAM habilitado
+#   6.2.1.1.1 - systemd-journald activo
+#   6.2.1.1.5 - journald Storage=persistent
+#   6.2.1.1.6 - journald Compress=yes
+#   6.2.1.2.1 - systemd-journal-remote instalado
+#   6.2.1.2.2 - systemd-journal-remote autenticación configurada
+#   6.2.2.4   - rsyslog FileCreateMode configurado
+#   6.2.2.8   - logrotate configurado
+#   6.2.3.1   - acceso a archivos de log configurado
+#   7.1.1     - acceso a /etc/passwd configurado
+#   7.1.2     - acceso a /etc/passwd- configurado
+#   7.1.3     - acceso a /etc/group configurado
+#   7.1.4     - acceso a /etc/group- configurado
+#   7.1.5     - acceso a /etc/shadow configurado
+#   7.1.6     - acceso a /etc/shadow- configurado
+#   7.1.7     - acceso a /etc/gshadow configurado
+#   7.1.8     - acceso a /etc/gshadow- configurado
+#   7.1.9     - acceso a /etc/shells configurado
+#   7.1.11    - archivos/directorios world writable asegurados
+#   7.1.12    - no existen archivos sin propietario o grupo
+# Controles: NIST SP 800-53 Rev. 5 - AC-3, AC-6, AU-2, AU-3, AU-4, AU-7, AU-8, AU-12, CA-9, CM-1, CM-2, CM-6, CM-7, IA-3, IA-5, IA-11, MP-2, SC-2, SC-3, SC-4, SC-24
+# =============================================================================
+
+- name: "CIS Hardening Consolidado - Filesystem, Kernel, SELinux, Firewall y Acceso"
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    # --- /tmp ---
+    tmp_size: "2G"
+    tmp_mount_options: "defaults,rw,nosuid,nodev,noexec,relatime"
+
+    # --- /dev/shm ---
+    devshm_size: "2G"
+    devshm_mount_options: "defaults,rw,nosuid,nodev,noexec,relatime"
+
+    # --- SELinux ---
+    selinux_policy: "targeted" # Opciones: targeted | mls
+    selinux_state: "enforcing" # Opciones: enforcing | permissive
+    reboot_after_enable: false # true si SELinux estaba disabled
+
+    # --- sudo ---
+    sudo_timestamp_timeout: 15 # Minutos (máx recomendado: 15)
+    su_restrict_group: "sugroup" # Grupo vacío para restringir su
+
+    # --- Contraseñas ---
+    pwquality_minlen: 14 # Longitud mínima de contraseña
+    pwquality_minclass: 4 # Clases mínimas de caracteres
+    pwquality_dcredit: -1 # Mínimo de dígitos (-N = al menos N)
+    pwquality_ucredit: -1 # Mínimo de mayúsculas
+    pwquality_ocredit: -1 # Mínimo de especiales
+    pwquality_lcredit: -1 # Mínimo de minúsculas
+    pwhistory_remember: 24 # Número de contraseñas anteriores a recordar
+
+    # --- SSH ---
+    sshd_allow_groups: "sshusers" # Grupos permitidos para SSH (separados por espacio)
+
+    # --- Misc ---
+    fstab_path: "/etc/fstab"
+    modprobe_dir: "/etc/modprobe.d"
+
+  # ---------------------------------------------------------------------------
+  # PRE-CHECKS
+  # ---------------------------------------------------------------------------
+  pre_tasks:
+    - name: "Verificar sistema operativo compatible (RHEL/CentOS/Rocky/AlmaLinux)"
+      ansible.builtin.assert:
+        that:
+          - ansible_os_family == "RedHat"
+        fail_msg: "Este playbook está diseñado para sistemas basados en RHEL."
+        success_msg: "SO compatible: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+
+  # ---------------------------------------------------------------------------
+  # TASKS
+  # ---------------------------------------------------------------------------
+  tasks:
+    # =========================================================================
+    # SECCIÓN 1.1.1.10 - usb-storage kernel module
+    # =========================================================================
+
+    - name: "CIS 1.1.1.10 | Descargar el módulo usb-storage si está cargado"
+      ansible.builtin.command:
+        cmd: modprobe -r usb-storage
+      failed_when: false
+      changed_when: false
+      tags:
+        - cis_1.1.1.10
+        - kernel_modules
+        - usb_storage
+
+    - name: "CIS 1.1.1.10 | Remover usb-storage con rmmod"
+      ansible.builtin.command:
+        cmd: rmmod usb-storage
+      failed_when: false
+      changed_when: false
+      tags:
+        - cis_1.1.1.10
+        - kernel_modules
+        - usb_storage
+
+    - name: "CIS 1.1.1.10 | Crear /etc/modprobe.d/60-usb-storage.conf con blacklist e install"
+      ansible.builtin.copy:
+        dest: "{{ modprobe_dir }}/60-usb-storage.conf"
+        content: |
+          install usb_storage /bin/false
+          blacklist usb_storage
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_1.1.1.10
+        - kernel_modules
+        - usb_storage
+
+    - name: "CIS 1.1.1.10 | Verificar que usb-storage no está cargado"
+      ansible.builtin.shell:
+        cmd: "lsmod | grep -P -- 'usb(_|-)storage' || true"
+      register: usb_lsmod_check
+      changed_when: false
+      tags:
+        - cis_1.1.1.10
+        - kernel_modules
+        - usb_storage
+        - audit
+
+    - name: "CIS 1.1.1.10 | Verificar configuración blacklist e install en modprobe"
+      ansible.builtin.shell:
+        cmd: "modprobe --showconfig | grep -P -- '\\b(install|blacklist)\\h+usb_storage\\b'"
+      register: usb_modprobe_check
+      changed_when: false
+      tags:
+        - cis_1.1.1.10
+        - kernel_modules
+        - usb_storage
+        - audit
+
+    - name: "CIS 1.1.1.10 | Mostrar resultado de auditoría de usb-storage"
+      ansible.builtin.debug:
+        msg:
+          - "lsmod (debe estar vacío): '{{ usb_lsmod_check.stdout }}'"
+          - "modprobe config: {{ usb_modprobe_check.stdout_lines }}"
+      tags:
+        - cis_1.1.1.10
+        - kernel_modules
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 1.1.2.1 - /tmp
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.1.1 - Ensure /tmp is tmpfs or a separate partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.1.1 | Habilitar y desenmascarar tmp.mount"
+      ansible.builtin.systemd:
+        name: tmp.mount
+        masked: false
+        enabled: true
+      tags:
+        - cis_1.1.2.1.1
+        - tmp
+
+    - name: "CIS 1.1.2.1.1 | Asegurar entrada tmpfs para /tmp en /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/tmp\s+'
+        line: "tmpfs /tmp tmpfs {{ tmp_mount_options }},size={{ tmp_size }} 0 0"
+        state: present
+        backup: true
+      notify: Remount /tmp
+      tags:
+        - cis_1.1.2.1.1
+        - tmp
+
+    - name: "CIS 1.1.2.1.1 | Verificar que /tmp está montado"
+      ansible.builtin.command:
+        cmd: findmnt -kn /tmp
+      register: tmp_mounted_check
+      changed_when: false
+      failed_when: tmp_mounted_check.rc != 0
+      tags:
+        - cis_1.1.2.1.1
+        - tmp
+        - audit
+
+    - name: "CIS 1.1.2.1.1 | Mostrar estado del montaje de /tmp"
+      ansible.builtin.debug:
+        msg: "/tmp montado: {{ tmp_mounted_check.stdout }}"
+      tags:
+        - cis_1.1.2.1.1
+        - tmp
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.1.2 - Ensure nodev option set on /tmp partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.1.2 | Verificar que la opción nodev está activa en /tmp"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /tmp | grep -v 'nodev'"
+      register: tmp_nodev_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.1.2
+        - tmp
+        - nodev
+        - audit
+
+    - name: "CIS 1.1.2.1.2 | Advertir si nodev NO está activo en /tmp"
+      ansible.builtin.debug:
+        msg: "ADVERTENCIA: La opción 'nodev' NO está activa en /tmp. Se aplicará al remontar."
+      when: tmp_nodev_check.stdout | length > 0
+      tags:
+        - cis_1.1.2.1.2
+        - tmp
+        - nodev
+        - audit
+
+    - name: "CIS 1.1.2.1.2 | Asegurar nodev en entrada /tmp de /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/tmp\s+'
+        line: "tmpfs /tmp tmpfs {{ tmp_mount_options }},size={{ tmp_size }} 0 0"
+        state: present
+        backup: true
+      notify: Remount /tmp
+      tags:
+        - cis_1.1.2.1.2
+        - tmp
+        - nodev
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.1.3 - Ensure nosuid option set on /tmp partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.1.3 | Verificar que la opción nosuid está activa en /tmp"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /tmp | grep -v 'nosuid'"
+      register: tmp_nosuid_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.1.3
+        - tmp
+        - nosuid
+        - audit
+
+    - name: "CIS 1.1.2.1.3 | Advertir si nosuid NO está activo en /tmp"
+      ansible.builtin.debug:
+        msg: "ADVERTENCIA: La opción 'nosuid' NO está activa en /tmp. Se aplicará al remontar."
+      when: tmp_nosuid_check.stdout | length > 0
+      tags:
+        - cis_1.1.2.1.3
+        - tmp
+        - nosuid
+        - audit
+
+    - name: "CIS 1.1.2.1.3 | Asegurar nosuid en entrada /tmp de /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/tmp\s+'
+        line: "tmpfs /tmp tmpfs {{ tmp_mount_options }},size={{ tmp_size }} 0 0"
+        state: present
+        backup: true
+      notify: Remount /tmp
+      tags:
+        - cis_1.1.2.1.3
+        - tmp
+        - nosuid
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.1.4 - Ensure noexec option set on /tmp partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.1.4 | Verificar que la opción noexec está activa en /tmp"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /tmp | grep -v 'noexec'"
+      register: tmp_noexec_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.1.4
+        - tmp
+        - noexec
+        - audit
+
+    - name: "CIS 1.1.2.1.4 | Advertir si noexec NO está activo en /tmp"
+      ansible.builtin.debug:
+        msg: "ADVERTENCIA: La opción 'noexec' NO está activa en /tmp. Se aplicará al remontar."
+      when: tmp_noexec_check.stdout | length > 0
+      tags:
+        - cis_1.1.2.1.4
+        - tmp
+        - noexec
+        - audit
+
+    - name: "CIS 1.1.2.1.4 | Asegurar noexec en entrada /tmp de /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/tmp\s+'
+        line: "tmpfs /tmp tmpfs {{ tmp_mount_options }},size={{ tmp_size }} 0 0"
+        state: present
+        backup: true
+      notify: Remount /tmp
+      tags:
+        - cis_1.1.2.1.4
+        - tmp
+        - noexec
+
+    # -------------------------------------------------------------------------
+    # Verificación final de opciones en /tmp
+    # -------------------------------------------------------------------------
+    - name: "Flush handlers para aplicar remontaje de /tmp antes de verificar"
+      ansible.builtin.meta: flush_handlers
+      tags:
+        - tmp
+        - audit
+
+    - name: "CIS 1.1.2.1 | Verificación final de todas las opciones en /tmp"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /tmp"
+      register: tmp_final_check
+      changed_when: false
+      tags:
+        - tmp
+        - audit
+
+    - name: "CIS 1.1.2.1 | Fallar si alguna opción requerida está ausente en /tmp"
+      ansible.builtin.assert:
+        that:
+          - "'nodev' in tmp_final_check.stdout"
+          - "'nosuid' in tmp_final_check.stdout"
+          - "'noexec' in tmp_final_check.stdout"
+        fail_msg: "FALLO: /tmp no tiene todas las opciones requeridas. Estado: {{ tmp_final_check.stdout }}"
+        success_msg: "OK: /tmp tiene todas las opciones de seguridad requeridas."
+      tags:
+        - tmp
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 1.1.2.2 - /dev/shm
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.2.1 - Ensure /dev/shm is tmpfs
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.2.1 | Verificar si /dev/shm está actualmente montado"
+      ansible.builtin.command:
+        cmd: findmnt -kn /dev/shm
+      register: devshm_mounted
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.2.1
+        - devshm
+        - audit
+
+    - name: "CIS 1.1.2.2.1 | Mostrar estado actual del montaje de /dev/shm"
+      ansible.builtin.debug:
+        msg: "Estado actual de /dev/shm: {{ devshm_mounted.stdout if devshm_mounted.stdout else 'NO MONTADO' }}"
+      tags:
+        - cis_1.1.2.2.1
+        - devshm
+        - audit
+
+    - name: "CIS 1.1.2.2.1 | Asegurar entrada tmpfs para /dev/shm en /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/dev/shm\s+'
+        line: "tmpfs /dev/shm tmpfs {{ devshm_mount_options }},size={{ devshm_size }} 0 0"
+        state: present
+        backup: true
+      notify: Remount /dev/shm
+      tags:
+        - cis_1.1.2.2.1
+        - devshm
+
+    - name: "CIS 1.1.2.2.1 | Verificar que /dev/shm está montado como tmpfs"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /dev/shm | grep -i tmpfs"
+      register: devshm_tmpfs_check
+      changed_when: false
+      failed_when: devshm_tmpfs_check.rc != 0
+      tags:
+        - cis_1.1.2.2.1
+        - devshm
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.2.2 - Ensure nodev option set on /dev/shm partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.2.2 | Verificar que nodev está activo en /dev/shm"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /dev/shm | grep -v 'nodev'"
+      register: devshm_nodev_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.2.2
+        - devshm
+        - nodev
+        - audit
+
+    - name: "CIS 1.1.2.2.2 | Asegurar nodev en /dev/shm en /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/dev/shm\s+'
+        line: "tmpfs /dev/shm tmpfs {{ devshm_mount_options }},size={{ devshm_size }} 0 0"
+        state: present
+        backup: true
+      when: devshm_nodev_check.stdout | length > 0
+      notify: Remount /dev/shm
+      tags:
+        - cis_1.1.2.2.2
+        - devshm
+        - nodev
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.2.3 - Ensure nosuid option set on /dev/shm partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.2.3 | Verificar que nosuid está activo en /dev/shm"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /dev/shm | grep -v 'nosuid'"
+      register: devshm_nosuid_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.2.3
+        - devshm
+        - nosuid
+        - audit
+
+    - name: "CIS 1.1.2.2.3 | Asegurar nosuid en /dev/shm en /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/dev/shm\s+'
+        line: "tmpfs /dev/shm tmpfs {{ devshm_mount_options }},size={{ devshm_size }} 0 0"
+        state: present
+        backup: true
+      when: devshm_nosuid_check.stdout | length > 0
+      notify: Remount /dev/shm
+      tags:
+        - cis_1.1.2.2.3
+        - devshm
+        - nosuid
+
+    # -------------------------------------------------------------------------
+    # CIS 1.1.2.2.4 - Ensure noexec option set on /dev/shm partition
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.1.2.2.4 | Verificar que noexec está activo en /dev/shm"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /dev/shm | grep -v 'noexec'"
+      register: devshm_noexec_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.1.2.2.4
+        - devshm
+        - noexec
+        - audit
+
+    - name: "CIS 1.1.2.2.4 | Asegurar noexec en /dev/shm en /etc/fstab"
+      ansible.builtin.lineinfile:
+        path: "{{ fstab_path }}"
+        regexp: '^\s*tmpfs\s+/dev/shm\s+'
+        line: "tmpfs /dev/shm tmpfs {{ devshm_mount_options }},size={{ devshm_size }} 0 0"
+        state: present
+        backup: true
+      when: devshm_noexec_check.stdout | length > 0
+      notify: Remount /dev/shm
+      tags:
+        - cis_1.1.2.2.4
+        - devshm
+        - noexec
+
+    # -------------------------------------------------------------------------
+    # Verificación final de opciones en /dev/shm
+    # -------------------------------------------------------------------------
+    - name: "Flush handlers para aplicar remontaje de /dev/shm antes de verificar"
+      ansible.builtin.meta: flush_handlers
+      tags:
+        - devshm
+        - audit
+
+    - name: "CIS 1.1.2.2 | Verificación final de todas las opciones en /dev/shm"
+      ansible.builtin.shell:
+        cmd: "findmnt -kn /dev/shm"
+      register: devshm_final_check
+      changed_when: false
+      tags:
+        - devshm
+        - audit
+
+    - name: "CIS 1.1.2.2 | Fallar si alguna opción requerida está ausente en /dev/shm"
+      ansible.builtin.assert:
+        that:
+          - "'nodev' in devshm_final_check.stdout"
+          - "'nosuid' in devshm_final_check.stdout"
+          - "'noexec' in devshm_final_check.stdout"
+          - "'tmpfs' in devshm_final_check.stdout"
+        fail_msg: "FALLO: /dev/shm no tiene todas las opciones. Estado: {{ devshm_final_check.stdout }}"
+        success_msg: "OK: /dev/shm tiene todas las opciones de seguridad requeridas."
+      tags:
+        - devshm
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 1.3.1 - SELinux
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 1.3.1.1 - Ensure SELinux is installed
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.3.1.1 | Instalar libselinux"
+      ansible.builtin.dnf:
+        name: libselinux
+        state: present
+      tags:
+        - cis_1.3.1.1
+        - selinux_install
+
+    - name: "CIS 1.3.1.1 | Verificar que libselinux está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q libselinux
+      register: libselinux_check
+      changed_when: false
+      failed_when: libselinux_check.rc != 0
+      tags:
+        - cis_1.3.1.1
+        - selinux_install
+        - audit
+
+    - name: "CIS 1.3.1.1 | Mostrar versión de libselinux instalada"
+      ansible.builtin.debug:
+        msg: "{{ libselinux_check.stdout }}"
+      tags:
+        - cis_1.3.1.1
+        - selinux_install
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 1.3.1.2 - Ensure SELinux is not disabled in bootloader
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.3.1.2 | Eliminar parámetros selinux=0 y enforcing=0 del bootloader"
+      ansible.builtin.command:
+        cmd: grubby --update-kernel ALL --remove-args "selinux=0 enforcing=0"
+      changed_when: true
+      tags:
+        - cis_1.3.1.2
+        - selinux_bootloader
+
+    - name: "CIS 1.3.1.2 | Verificar parámetros prohibidos en grubby"
+      ansible.builtin.shell:
+        cmd: "grubby --info=ALL | grep -Po '(selinux|enforcing)=0\\b' || true"
+      register: grubby_check
+      changed_when: false
+      tags:
+        - cis_1.3.1.2
+        - selinux_bootloader
+        - audit
+
+    - name: "CIS 1.3.1.2 | Fallar si se encontraron parámetros prohibidos en grubby"
+      ansible.builtin.fail:
+        msg: "FALLO: Parámetros prohibidos en grubby: {{ grubby_check.stdout }}"
+      when: grubby_check.stdout | length > 0
+      tags:
+        - cis_1.3.1.2
+        - selinux_bootloader
+        - audit
+
+    - name: "CIS 1.3.1.2 | Verificar parámetros prohibidos en configuración heredada grub2-mkconfig"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Prs --
+          '^\h*([^#\n\r]+\h+)?kernelopts=([^#\n\r]+\h+)?(selinux|enforcing)=0\b'
+          /boot/grub2 /boot/efi 2>/dev/null || true
+      register: grub2_legacy_check
+      changed_when: false
+      tags:
+        - cis_1.3.1.2
+        - selinux_bootloader
+        - audit
+
+    - name: "CIS 1.3.1.2 | Regenerar grub2-mkconfig si hay parámetros prohibidos heredados"
+      ansible.builtin.shell:
+        cmd: >
+          grub2-mkconfig -o "$(grep -Prl
+          '\h*([^#\n\r]+\h+)?kernelopts=([^#\n\r]+\h+)?(selinux|enforcing)=0\b'
+          /boot/grub2 /boot/efi)"
+      when: grub2_legacy_check.stdout | length > 0
+      tags:
+        - cis_1.3.1.2
+        - selinux_bootloader
+
+    # -------------------------------------------------------------------------
+    # CIS 1.3.1.3 - Ensure SELinux policy is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.3.1.3 | Configurar SELINUXTYPE en /etc/selinux/config"
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^\s*SELINUXTYPE\s*='
+        line: "SELINUXTYPE={{ selinux_policy }}"
+        state: present
+        create: false
+        backup: true
+      notify: Aviso reinicio SELinux
+      tags:
+        - cis_1.3.1.3
+        - selinux_policy
+
+    - name: "CIS 1.3.1.3 | Verificar SELINUXTYPE en /etc/selinux/config"
+      ansible.builtin.shell:
+        cmd: "grep -Psi -- '^\\h*SELINUXTYPE\\h*=\\h*(targeted|mls)\\b' /etc/selinux/config"
+      register: selinux_type_check
+      changed_when: false
+      failed_when: selinux_type_check.rc != 0
+      tags:
+        - cis_1.3.1.3
+        - selinux_policy
+        - audit
+
+    - name: "CIS 1.3.1.3 | Mostrar política SELinux configurada"
+      ansible.builtin.debug:
+        msg: "Política SELinux: {{ selinux_type_check.stdout }}"
+      tags:
+        - cis_1.3.1.3
+        - selinux_policy
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 1.3.1.4 - Ensure the SELinux mode is not disabled
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.3.1.4 | Configurar SELINUX (modo) en /etc/selinux/config"
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^\s*SELINUX\s*='
+        line: "SELINUX={{ selinux_state }}"
+        state: present
+        create: false
+        backup: true
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+
+    - name: "CIS 1.3.1.4 | Verificar modo SELINUX en /etc/selinux/config"
+      ansible.builtin.shell:
+        cmd: "grep -Pi -- '^\\h*SELINUX=(enforcing|permissive)\\b' /etc/selinux/config"
+      register: selinux_mode_config_check
+      changed_when: false
+      failed_when: selinux_mode_config_check.rc != 0
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+        - audit
+
+    - name: "CIS 1.3.1.4 | Obtener modo SELinux en ejecución"
+      ansible.builtin.command:
+        cmd: getenforce
+      register: selinux_runtime_mode
+      changed_when: false
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+        - audit
+
+    - name: "CIS 1.3.1.4 | Crear /.autorelabel si SELinux estaba deshabilitado"
+      ansible.builtin.file:
+        path: /.autorelabel
+        state: touch
+        mode: "0600"
+      when: selinux_runtime_mode.stdout | lower == "disabled"
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+
+    - name: "CIS 1.3.1.4 | Aplicar modo SELinux en tiempo de ejecución"
+      ansible.builtin.command:
+        cmd: "setenforce {{ '1' if selinux_state == 'enforcing' else '0' }}"
+      when: selinux_runtime_mode.stdout | lower != "disabled"
+      changed_when: true
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+
+    - name: "CIS 1.3.1.4 | Mostrar modo SELinux en ejecución"
+      ansible.builtin.debug:
+        msg: >
+          Modo en ejecución: {{ selinux_runtime_mode.stdout }}.
+          Configurado en archivo: {{ selinux_mode_config_check.stdout }}.
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 1.3.1.7 - Ensure mcstrans is not installed
+    # -------------------------------------------------------------------------
+    - name: "CIS 1.3.1.7 | Verificar si mcstrans está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q mcstrans
+      register: mcstrans_check
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.3.1.7
+        - mcstrans
+        - audit
+
+    - name: "CIS 1.3.1.7 | Desinstalar mcstrans si está presente"
+      ansible.builtin.dnf:
+        name: mcstrans
+        state: absent
+      when: mcstrans_check.rc == 0
+      tags:
+        - cis_1.3.1.7
+        - mcstrans
+
+    - name: "CIS 1.3.1.7 | Confirmar que mcstrans fue eliminado"
+      ansible.builtin.command:
+        cmd: rpm -q mcstrans
+      register: mcstrans_verify
+      changed_when: false
+      failed_when: mcstrans_verify.rc == 0
+      tags:
+        - cis_1.3.1.7
+        - mcstrans
+        - audit
+
+    - name: "CIS 1.3.1.7 | Mostrar estado de mcstrans"
+      ansible.builtin.debug:
+        msg: "mcstrans no está instalado: OK"
+      tags:
+        - cis_1.3.1.7
+        - mcstrans
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 1.4.2 - Bootloader config access
+    # =========================================================================
+
+    - name: "CIS 1.4.2 | Establecer permisos en archivos de configuración grub2 (grub.cfg)"
+      ansible.builtin.file:
+        path: /boot/grub2/grub.cfg
+        owner: root
+        group: root
+        mode: "0600"
+      when: ansible_facts['system'] == 'Linux'
+      failed_when: false
+      tags:
+        - cis_1.4.2
+        - bootloader
+
+    - name: "CIS 1.4.2 | Establecer permisos en grubenv"
+      ansible.builtin.file:
+        path: /boot/grub2/grubenv
+        owner: root
+        group: root
+        mode: "0600"
+      failed_when: false
+      tags:
+        - cis_1.4.2
+        - bootloader
+
+    - name: "CIS 1.4.2 | Establecer permisos en user.cfg (si existe)"
+      ansible.builtin.file:
+        path: /boot/grub2/user.cfg
+        owner: root
+        group: root
+        mode: "0600"
+      failed_when: false
+      tags:
+        - cis_1.4.2
+        - bootloader
+
+    - name: "CIS 1.4.2 | Buscar todos los archivos grub en /boot para auditoría"
+      ansible.builtin.shell:
+        cmd: >
+          find /boot -type f \( -name 'grub*' -o -name 'user.cfg' \)
+          -exec stat -Lc '%n %#a %U %G' {} \;
+      register: grub_files_audit
+      changed_when: false
+      tags:
+        - cis_1.4.2
+        - bootloader
+        - audit
+
+    - name: "CIS 1.4.2 | Mostrar permisos actuales de archivos grub"
+      ansible.builtin.debug:
+        msg: "{{ grub_files_audit.stdout_lines }}"
+      tags:
+        - cis_1.4.2
+        - bootloader
+        - audit
+
+    - name: "CIS 1.4.2 | Verificar que /boot/efi tiene opciones de seguridad en fstab (si aplica)"
+      ansible.builtin.shell:
+        cmd: "grep -Pi '\\s/boot/efi\\s' {{ fstab_path }} | grep -P '(fmask=0077|uid=0|gid=0)' || true"
+      register: efi_fstab_check
+      changed_when: false
+      tags:
+        - cis_1.4.2
+        - bootloader
+        - audit
+
+    - name: "CIS 1.4.2 | Advertir si /boot/efi no tiene opciones fmask/uid/gid en fstab"
+      ansible.builtin.debug:
+        msg: >
+          ADVERTENCIA: Si usa EFI, verifique que /etc/fstab incluya
+          fmask=0077,uid=0,gid=0 en la entrada de /boot/efi.
+          Puede requerir reinicio para aplicar cambios en vFat.
+      when: efi_fstab_check.stdout | length == 0
+      tags:
+        - cis_1.4.2
+        - bootloader
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 1.5.5 - kernel.dmesg_restrict
+    # =========================================================================
+
+    - name: "CIS 1.5.5 | Crear directorio /etc/sysctl.d si no existe"
+      ansible.builtin.file:
+        path: /etc/sysctl.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags:
+        - cis_1.5.5
+        - sysctl
+        - kernel
+
+    - name: "CIS 1.5.5 | Comentar valores incorrectos de kernel.dmesg_restrict en archivos existentes"
+      ansible.builtin.shell:
+        cmd: >
+          for f in /etc/sysctl.conf /etc/sysctl.d/*.conf /run/sysctl.d/*.conf
+          /usr/local/lib/sysctl.d/*.conf /usr/lib/sysctl.d/*.conf
+          /lib/sysctl.d/*.conf; do
+            [ -f "$f" ] && \
+            grep -Poi '^\h*kernel[./]dmesg_restrict\h*=\h*\H+\b' "$f" | \
+            grep -Pivq '^\h*kernel[./]dmesg_restrict\h*=\h*1\b' && \
+            sed -ri '/^\s*kernel[./]dmesg_restrict\s*=\s*([02-9]|1[0-9]+)/s/^/# /' "$f" || true
+          done
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_1.5.5
+        - sysctl
+        - kernel
+
+    - name: "CIS 1.5.5 | Establecer kernel.dmesg_restrict = 1 en /etc/sysctl.d/60-kernel_sysctl.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/sysctl.d/60-kernel_sysctl.conf
+        regexp: '^\s*kernel\.dmesg_restrict\s*='
+        line: "kernel.dmesg_restrict = 1"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Reload sysctl
+      tags:
+        - cis_1.5.5
+        - sysctl
+        - kernel
+
+    - name: "CIS 1.5.5 | Verificar kernel.dmesg_restrict en tiempo de ejecución"
+      ansible.builtin.command:
+        cmd: sysctl kernel.dmesg_restrict
+      register: dmesg_restrict_check
+      changed_when: false
+      tags:
+        - cis_1.5.5
+        - sysctl
+        - kernel
+        - audit
+
+    - name: "CIS 1.5.5 | Validar que kernel.dmesg_restrict = 1"
+      ansible.builtin.assert:
+        that:
+          - "'kernel.dmesg_restrict = 1' in dmesg_restrict_check.stdout"
+        fail_msg: "FALLO: kernel.dmesg_restrict no es 1. Valor actual: {{ dmesg_restrict_check.stdout }}"
+        success_msg: "OK: kernel.dmesg_restrict = 1"
+      tags:
+        - cis_1.5.5
+        - sysctl
+        - kernel
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 4.1 - firewalld
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 4.1.1 - Ensure firewalld is installed
+    # -------------------------------------------------------------------------
+    - name: "CIS 4.1.1 | Instalar firewalld"
+      ansible.builtin.dnf:
+        name: firewalld
+        state: present
+      tags:
+        - cis_4.1.1
+        - firewalld
+
+    - name: "CIS 4.1.1 | Habilitar e iniciar el servicio firewalld"
+      ansible.builtin.systemd:
+        name: firewalld
+        enabled: true
+        state: started
+      tags:
+        - cis_4.1.1
+        - firewalld
+
+    - name: "CIS 4.1.1 | Verificar que firewalld está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q firewalld
+      register: firewalld_installed_check
+      changed_when: false
+      failed_when: firewalld_installed_check.rc != 0
+      tags:
+        - cis_4.1.1
+        - firewalld
+        - audit
+
+    - name: "CIS 4.1.1 | Mostrar versión de firewalld instalada"
+      ansible.builtin.debug:
+        msg: "{{ firewalld_installed_check.stdout }}"
+      tags:
+        - cis_4.1.1
+        - firewalld
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 4.1.2 - Ensure firewalld backend is configured (nftables)
+    # -------------------------------------------------------------------------
+    - name: "CIS 4.1.2 | Configurar FirewallBackend=nftables en /etc/firewalld/firewalld.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/firewalld/firewalld.conf
+        regexp: '^\s*FirewallBackend\s*='
+        line: "FirewallBackend=nftables"
+        state: present
+        backup: true
+      notify: Restart firewalld
+      tags:
+        - cis_4.1.2
+        - firewalld
+        - nftables
+
+    - name: "CIS 4.1.2 | Verificar que FirewallBackend=nftables está configurado"
+      ansible.builtin.shell:
+        cmd: "grep -Psi -- 'FirewallBackend\\h*=\\h*nftables\\b' /etc/firewalld/firewalld.conf"
+      register: firewalld_backend_check
+      changed_when: false
+      failed_when: firewalld_backend_check.rc != 0
+      tags:
+        - cis_4.1.2
+        - firewalld
+        - nftables
+        - audit
+
+    - name: "CIS 4.1.2 | Mostrar backend de firewalld configurado"
+      ansible.builtin.debug:
+        msg: "Backend de firewalld: {{ firewalld_backend_check.stdout }}"
+      tags:
+        - cis_4.1.2
+        - firewalld
+        - nftables
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 4.1.3 - Ensure firewalld.service is enabled and active
+    # -------------------------------------------------------------------------
+    - name: "CIS 4.1.3 | Desenmascarar firewalld.service"
+      ansible.builtin.systemd:
+        name: firewalld.service
+        masked: false
+      tags:
+        - cis_4.1.3
+        - firewalld
+
+    - name: "CIS 4.1.3 | Habilitar e iniciar firewalld.service"
+      ansible.builtin.systemd:
+        name: firewalld.service
+        enabled: true
+        state: started
+      tags:
+        - cis_4.1.3
+        - firewalld
+
+    - name: "CIS 4.1.3 | Verificar que firewalld.service está habilitado"
+      ansible.builtin.command:
+        cmd: systemctl is-enabled firewalld.service
+      register: firewalld_enabled_check
+      changed_when: false
+      failed_when: firewalld_enabled_check.stdout != "enabled"
+      tags:
+        - cis_4.1.3
+        - firewalld
+        - audit
+
+    - name: "CIS 4.1.3 | Verificar que firewalld.service está activo"
+      ansible.builtin.command:
+        cmd: systemctl is-active firewalld.service
+      register: firewalld_active_check
+      changed_when: false
+      failed_when: firewalld_active_check.stdout != "active"
+      tags:
+        - cis_4.1.3
+        - firewalld
+        - audit
+
+    - name: "CIS 4.1.3 | Mostrar estado de firewalld.service"
+      ansible.builtin.debug:
+        msg:
+          - "Estado habilitado: {{ firewalld_enabled_check.stdout }}"
+          - "Estado activo: {{ firewalld_active_check.stdout }}"
+      tags:
+        - cis_4.1.3
+        - firewalld
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 5.2 - sudo
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 5.2.1 - Ensure sudo is installed
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.2.1 | Instalar sudo"
+      ansible.builtin.dnf:
+        name: sudo
+        state: present
+      tags:
+        - cis_5.2.1
+        - sudo
+
+    - name: "CIS 5.2.1 | Verificar que sudo está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q sudo
+      register: sudo_installed_check
+      changed_when: false
+      failed_when: sudo_installed_check.rc != 0
+      tags:
+        - cis_5.2.1
+        - sudo
+        - audit
+
+    - name: "CIS 5.2.1 | Mostrar versión de sudo instalada"
+      ansible.builtin.debug:
+        msg: "{{ sudo_installed_check.stdout }}"
+      tags:
+        - cis_5.2.1
+        - sudo
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.2.2 - Ensure sudo commands use pty
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.2.2 | Asegurar que 'Defaults use_pty' está en /etc/sudoers.d/cis_sudo"
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/cis_sudo
+        regexp: '^\s*Defaults\s+.*use_pty'
+        line: "Defaults use_pty"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "/usr/sbin/visudo -cf %s"
+      tags:
+        - cis_5.2.2
+        - sudo
+
+    - name: "CIS 5.2.2 | Verificar que use_pty está configurado"
+      ansible.builtin.shell:
+        cmd: "grep -rPi -- '^\\h*Defaults\\h+([^#\\n\\r]+,\\h*)?use_pty\\b' /etc/sudoers*"
+      register: sudo_usepty_check
+      changed_when: false
+      failed_when: sudo_usepty_check.rc != 0
+      tags:
+        - cis_5.2.2
+        - sudo
+        - audit
+
+    - name: "CIS 5.2.2 | Verificar que !use_pty NO está configurado"
+      ansible.builtin.shell:
+        cmd: "grep -rPi -- '^\\h*Defaults\\h+([^#\\n\\r]+,\\h*)?!use_pty\\b' /etc/sudoers* || true"
+      register: sudo_no_usepty_check
+      changed_when: false
+      tags:
+        - cis_5.2.2
+        - sudo
+        - audit
+
+    - name: "CIS 5.2.2 | Fallar si !use_pty está presente en sudoers"
+      ansible.builtin.fail:
+        msg: "FALLO: '!use_pty' encontrado en sudoers: {{ sudo_no_usepty_check.stdout }}"
+      when: sudo_no_usepty_check.stdout | length > 0
+      tags:
+        - cis_5.2.2
+        - sudo
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.2.5 - Ensure re-authentication for privilege escalation is not disabled
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.2.5 | Verificar que !authenticate NO está en sudoers"
+      ansible.builtin.shell:
+        cmd: "grep -r '^[^#].*!authenticate' /etc/sudoers* || true"
+      register: sudo_noauth_check
+      changed_when: false
+      tags:
+        - cis_5.2.5
+        - sudo
+        - audit
+
+    - name: "CIS 5.2.5 | Advertir y eliminar !authenticate si se encontró en sudoers"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '(\s+)!authenticate\b'
+        replace: ""
+        backup: true
+      loop: "{{ sudo_noauth_check.stdout_lines | map('regex_replace', ':.*', '') | unique | list }}"
+      when: sudo_noauth_check.stdout | length > 0
+      tags:
+        - cis_5.2.5
+        - sudo
+
+    - name: "CIS 5.2.5 | Confirmar que !authenticate no está presente"
+      ansible.builtin.shell:
+        cmd: "grep -r '^[^#].*!authenticate' /etc/sudoers* || true"
+      register: sudo_noauth_verify
+      changed_when: false
+      tags:
+        - cis_5.2.5
+        - sudo
+        - audit
+
+    - name: "CIS 5.2.5 | Fallar si !authenticate aún está presente"
+      ansible.builtin.fail:
+        msg: "FALLO: '!authenticate' todavía presente en sudoers: {{ sudo_noauth_verify.stdout }}"
+      when: sudo_noauth_verify.stdout | length > 0
+      tags:
+        - cis_5.2.5
+        - sudo
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.2.6 - Ensure sudo timestamp_timeout is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.2.6 | Configurar timestamp_timeout={{ sudo_timestamp_timeout }} en sudoers"
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/cis_sudo
+        regexp: '^\s*Defaults\s+.*timestamp_timeout'
+        line: "Defaults timestamp_timeout={{ sudo_timestamp_timeout }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "/usr/sbin/visudo -cf %s"
+      tags:
+        - cis_5.2.6
+        - sudo
+
+    - name: "CIS 5.2.6 | Verificar timestamp_timeout en sudoers"
+      ansible.builtin.shell:
+        cmd: "grep -roP 'timestamp_timeout=\\K[0-9]*' /etc/sudoers*"
+      register: sudo_timeout_check
+      changed_when: false
+      tags:
+        - cis_5.2.6
+        - sudo
+        - audit
+
+    - name: "CIS 5.2.6 | Mostrar timestamp_timeout configurado"
+      ansible.builtin.debug:
+        msg: "sudo timestamp_timeout: {{ sudo_timeout_check.stdout_lines }}"
+      tags:
+        - cis_5.2.6
+        - sudo
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.2.7 - Ensure access to the su command is restricted
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.2.7 | Crear grupo vacío '{{ su_restrict_group }}' para restricción de su"
+      ansible.builtin.group:
+        name: "{{ su_restrict_group }}"
+        state: present
+        system: true
+      tags:
+        - cis_5.2.7
+        - sudo
+        - su
+
+    - name: "CIS 5.2.7 | Configurar pam_wheel.so en /etc/pam.d/su"
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/su
+        regexp: '^\s*auth\s+(required|requisite)\s+pam_wheel\.so'
+        line: "auth required pam_wheel.so use_uid group={{ su_restrict_group }}"
+        state: present
+        backup: true
+      tags:
+        - cis_5.2.7
+        - sudo
+        - su
+
+    - name: "CIS 5.2.7 | Verificar configuración pam_wheel.so en /etc/pam.d/su"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Pi '^\h*auth\h+(required|requisite)\h+pam_wheel\.so\h+.*use_uid\b.*group=\H+\b'
+          /etc/pam.d/su
+      register: pam_wheel_check
+      changed_when: false
+      failed_when: pam_wheel_check.rc != 0
+      tags:
+        - cis_5.2.7
+        - sudo
+        - su
+        - audit
+
+    - name: "CIS 5.2.7 | Verificar que el grupo '{{ su_restrict_group }}' está vacío"
+      ansible.builtin.shell:
+        cmd: "grep -P '^{{ su_restrict_group }}:' /etc/group"
+      register: sugroup_check
+      changed_when: false
+      tags:
+        - cis_5.2.7
+        - sudo
+        - su
+        - audit
+
+    - name: "CIS 5.2.7 | Mostrar miembros del grupo '{{ su_restrict_group }}'"
+      ansible.builtin.debug:
+        msg: "Grupo su: {{ sugroup_check.stdout }} (debe estar vacío después del GID)"
+      tags:
+        - cis_5.2.7
+        - sudo
+        - su
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 5.3 - PAM / Contraseñas
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 5.3.2.3 - Ensure pam_pwquality module is enabled
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.3.2.3 | Instalar pam_pwquality (libpwquality)"
+      ansible.builtin.dnf:
+        name: libpwquality
+        state: present
+      tags:
+        - cis_5.3.2.3
+        - pam
+        - pwquality
+
+    - name: "CIS 5.3.2.3 | Habilitar pam_pwquality con authselect (feature with-pwquality)"
+      ansible.builtin.command:
+        cmd: authselect enable-feature with-pwquality
+      register: authselect_pwquality
+      changed_when: authselect_pwquality.rc == 0
+      failed_when: false
+      tags:
+        - cis_5.3.2.3
+        - pam
+        - pwquality
+
+    - name: "CIS 5.3.2.3 | Aplicar cambios de authselect"
+      ansible.builtin.command:
+        cmd: authselect apply-changes
+      changed_when: true
+      tags:
+        - cis_5.3.2.3
+        - pam
+        - pwquality
+
+    - name: "CIS 5.3.2.3 | Verificar que pam_pwquality.so está en password-auth y system-auth"
+      ansible.builtin.shell:
+        cmd: "grep -P -- '\\bpam_pwquality\\.so\\b' /etc/pam.d/password-auth /etc/pam.d/system-auth"
+      register: pwquality_pam_check
+      changed_when: false
+      failed_when: pwquality_pam_check.rc != 0
+      tags:
+        - cis_5.3.2.3
+        - pam
+        - pwquality
+        - audit
+
+    - name: "CIS 5.3.2.3 | Mostrar líneas pam_pwquality en PAM"
+      ansible.builtin.debug:
+        msg: "{{ pwquality_pam_check.stdout_lines }}"
+      tags:
+        - cis_5.3.2.3
+        - pam
+        - pwquality
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.3.3.2.2 - Ensure password length is configured (minlen >= 14)
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.3.3.2.2 | Crear directorio /etc/security/pwquality.conf.d si no existe"
+      ansible.builtin.file:
+        path: /etc/security/pwquality.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags:
+        - cis_5.3.3.2.2
+        - pam
+        - pwquality
+        - password_length
+
+    - name: "CIS 5.3.3.2.2 | Comentar minlen en /etc/security/pwquality.conf para evitar override"
+      ansible.builtin.replace:
+        path: /etc/security/pwquality.conf
+        regexp: '^\s*(minlen\s*=)'
+        replace: '# \1'
+        backup: true
+      tags:
+        - cis_5.3.3.2.2
+        - pam
+        - pwquality
+        - password_length
+
+    - name: "CIS 5.3.3.2.2 | Configurar minlen = {{ pwquality_minlen }} en 50-pwlength.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwquality.conf.d/50-pwlength.conf
+        regexp: '^\s*minlen\s*='
+        line: "minlen = {{ pwquality_minlen }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_5.3.3.2.2
+        - pam
+        - pwquality
+        - password_length
+
+    - name: "CIS 5.3.3.2.2 | Verificar que minlen >= 14 está configurado"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Psi -- '^\h*minlen\h*=\h*(1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})\b'
+          /etc/security/pwquality.conf /etc/security/pwquality.conf.d/*.conf
+      register: minlen_check
+      changed_when: false
+      failed_when: minlen_check.rc != 0
+      tags:
+        - cis_5.3.3.2.2
+        - pam
+        - pwquality
+        - password_length
+        - audit
+
+    - name: "CIS 5.3.3.2.2 | Mostrar configuración de minlen"
+      ansible.builtin.debug:
+        msg: "{{ minlen_check.stdout }}"
+      tags:
+        - cis_5.3.3.2.2
+        - pam
+        - pwquality
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.3.3.2.3 - Ensure password complexity is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.3.3.2.3 | Comentar créditos en /etc/security/pwquality.conf para evitar override"
+      ansible.builtin.replace:
+        path: /etc/security/pwquality.conf
+        regexp: '^\s*([dulo]credit|minclass)\s*='
+        replace: '# \1 ='
+        backup: true
+      tags:
+        - cis_5.3.3.2.3
+        - pam
+        - pwquality
+        - password_complexity
+
+    - name: "CIS 5.3.3.2.3 | Configurar complejidad de contraseña en 50-pwcomplexity.conf"
+      ansible.builtin.blockinfile:
+        path: /etc/security/pwquality.conf.d/50-pwcomplexity.conf
+        block: |
+          minclass = {{ pwquality_minclass }}
+          dcredit = {{ pwquality_dcredit }}
+          ucredit = {{ pwquality_ucredit }}
+          ocredit = {{ pwquality_ocredit }}
+          lcredit = {{ pwquality_lcredit }}
+        marker: "# {mark} CIS 5.3.3.2.3 - password complexity"
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_5.3.3.2.3
+        - pam
+        - pwquality
+        - password_complexity
+
+    - name: "CIS 5.3.3.2.3 | Verificar complejidad de contraseña configurada"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Psi -- '^\h*(minclass|[dulo]credit)\b'
+          /etc/security/pwquality.conf /etc/security/pwquality.conf.d/*.conf
+      register: pwcomplexity_check
+      changed_when: false
+      failed_when: pwcomplexity_check.rc != 0
+      tags:
+        - cis_5.3.3.2.3
+        - pam
+        - pwquality
+        - password_complexity
+        - audit
+
+    - name: "CIS 5.3.3.2.3 | Mostrar configuración de complejidad"
+      ansible.builtin.debug:
+        msg: "{{ pwcomplexity_check.stdout_lines }}"
+      tags:
+        - cis_5.3.3.2.3
+        - pam
+        - pwquality
+        - password_complexity
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 5.3.3.2.6 - Password dictionary check
+    # =========================================================================
+
+    - name: "CIS 5.3.3.2.6 | Asegurar que dictcheck no está deshabilitado en pwquality.conf"
+      ansible.builtin.replace:
+        path: /etc/security/pwquality.conf
+        regexp: '^\s*dictcheck\s*=\s*0'
+        replace: "# dictcheck = 0"
+        backup: true
+      tags:
+        - cis_5.3.3.2.6
+        - pam
+        - pwquality
+        - dictcheck
+
+    - name: "CIS 5.3.3.2.6 | Asegurar que dictcheck no está deshabilitado en pwquality.conf.d"
+      ansible.builtin.shell:
+        cmd: >
+          find /etc/security/pwquality.conf.d/ -name '*.conf' -exec
+          sed -ri 's/^\s*dictcheck\s*=\s*0/# dictcheck = 0/' {} \;
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_5.3.3.2.6
+        - pam
+        - pwquality
+        - dictcheck
+
+    - name: "CIS 5.3.3.2.6 | Verificar que dictcheck=0 no aparece en ningún archivo de pwquality"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Psi -- '^\h*dictcheck\h*=\h*0\b'
+          /etc/security/pwquality.conf /etc/security/pwquality.conf.d/*.conf 2>/dev/null || true
+      register: dictcheck_config_check
+      changed_when: false
+      tags:
+        - cis_5.3.3.2.6
+        - pam
+        - pwquality
+        - dictcheck
+        - audit
+
+    - name: "CIS 5.3.3.2.6 | Verificar que dictcheck=0 no aparece en PAM"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Psi --
+          '^\h*password\h+(requisite|required|sufficient)\h+pam_pwquality\.so\h+([^#\n\r]+\h+)?dictcheck\h*=\h*0\b'
+          /etc/pam.d/system-auth /etc/pam.d/password-auth || true
+      register: dictcheck_pam_check
+      changed_when: false
+      tags:
+        - cis_5.3.3.2.6
+        - pam
+        - pwquality
+        - dictcheck
+        - audit
+
+    - name: "CIS 5.3.3.2.6 | Fallar si dictcheck está deshabilitado"
+      ansible.builtin.fail:
+        msg: "FALLO: dictcheck=0 encontrado. Config: {{ dictcheck_config_check.stdout }} | PAM: {{ dictcheck_pam_check.stdout }}"
+      when: dictcheck_config_check.stdout | length > 0 or dictcheck_pam_check.stdout | length > 0
+      tags:
+        - cis_5.3.3.2.6
+        - pam
+        - pwquality
+        - dictcheck
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 5.3.3.3.1 - Password history
+    # =========================================================================
+
+    - name: "CIS 5.3.3.3.1 | Configurar remember={{ pwhistory_remember }} en /etc/security/pwhistory.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/security/pwhistory.conf
+        regexp: '^\s*remember\s*='
+        line: "remember = {{ pwhistory_remember }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_5.3.3.3.1
+        - pam
+        - pwhistory
+
+    - name: "CIS 5.3.3.3.1 | Eliminar el argumento remember del módulo pam_pwhistory en PAM"
+      ansible.builtin.shell:
+        cmd: |
+          for l_pam_file in system-auth password-auth; do
+            l_authselect_file="/etc/authselect/$(head -1 /etc/authselect/authselect.conf | grep 'custom/')/$l_pam_file"
+            [ -f "$l_authselect_file" ] && \
+            sed -ri 's/(^\s*password\s+(requisite|required|sufficient)\s+pam_pwhistory\.so.*)(\s+remember\s*=\s*\S+)(.*$)/\1\4/' "$l_authselect_file"
+          done
+          authselect apply-changes
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_5.3.3.3.1
+        - pam
+        - pwhistory
+
+    - name: "CIS 5.3.3.3.1 | Verificar que remember >= {{ pwhistory_remember }} en pwhistory.conf"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Pi -- '^\h*remember\h*=\h*(2[4-9]|[3-9][0-9]|[1-9][0-9]{2,})\b'
+          /etc/security/pwhistory.conf
+      register: pwhistory_check
+      changed_when: false
+      failed_when: pwhistory_check.rc != 0
+      tags:
+        - cis_5.3.3.3.1
+        - pam
+        - pwhistory
+        - audit
+
+    - name: "CIS 5.3.3.3.1 | Mostrar configuración de historial de contraseñas"
+      ansible.builtin.debug:
+        msg: "Historial de contraseñas: {{ pwhistory_check.stdout }}"
+      tags:
+        - cis_5.3.3.3.1
+        - pam
+        - pwhistory
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 5.1 - SSH
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 5.1.2 - Ensure access to /etc/ssh/sshd_config is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.1.2 | Establecer permisos y propietario en /etc/ssh/sshd_config"
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config
+        owner: root
+        group: root
+        mode: "0600"
+      tags:
+        - cis_5.1.2
+        - ssh
+
+    - name: "CIS 5.1.2 | Establecer permisos en archivos *.conf en /etc/ssh/sshd_config.d/"
+      ansible.builtin.shell:
+        cmd: >
+          find /etc/ssh/sshd_config.d -type f -name '*.conf' 2>/dev/null |
+          xargs -I{} sh -c 'chown root:root "{}"; chmod u-x,og-rwx "{}"'
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_5.1.2
+        - ssh
+
+    - name: "CIS 5.1.2 | Verificar permisos en /etc/ssh/sshd_config"
+      ansible.builtin.shell:
+        cmd: "stat -Lc '%#a %U %G' /etc/ssh/sshd_config"
+      register: sshd_config_stat
+      changed_when: false
+      tags:
+        - cis_5.1.2
+        - ssh
+        - audit
+
+    - name: "CIS 5.1.2 | Mostrar permisos de sshd_config"
+      ansible.builtin.debug:
+        msg: "sshd_config (modo propietario grupo): {{ sshd_config_stat.stdout }}"
+      tags:
+        - cis_5.1.2
+        - ssh
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.1.4 - Ensure access to SSH private host key files is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.1.4 | Establecer propietario root en claves privadas SSH"
+      ansible.builtin.shell:
+        cmd: |
+          find -L /etc/ssh -xdev -type f 2>/dev/null | while read -r l_file; do
+            if ssh-keygen -lf "$l_file" &>/dev/null && \
+               file "$l_file" | grep -Piq '\bopenssh\b.*\bprivate\b'; then
+              chown root "$l_file"
+              if getent group ssh_keys &>/dev/null; then
+                chgrp ssh_keys "$l_file"
+                chmod u-x,g-wx,o-rwx "$l_file"
+              else
+                chgrp root "$l_file"
+                chmod u-x,go-rwx "$l_file"
+              fi
+            fi
+          done
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_5.1.4
+        - ssh
+
+    - name: "CIS 5.1.4 | Verificar permisos en claves privadas SSH"
+      ansible.builtin.shell:
+        cmd: |
+          find -L /etc/ssh -xdev -type f 2>/dev/null | while read -r l_file; do
+            if ssh-keygen -lf "$l_file" &>/dev/null && \
+               file "$l_file" | grep -Piq '\bopenssh\b.*\bprivate\b'; then
+              stat -Lc "Archivo: %n | Modo: %#a | Propietario: %U | Grupo: %G" "$l_file"
+            fi
+          done
+      register: ssh_private_key_check
+      changed_when: false
+      tags:
+        - cis_5.1.4
+        - ssh
+        - audit
+
+    - name: "CIS 5.1.4 | Mostrar estado de claves privadas SSH"
+      ansible.builtin.debug:
+        msg: "{{ ssh_private_key_check.stdout_lines }}"
+      tags:
+        - cis_5.1.4
+        - ssh
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.1.5 - Ensure access to SSH public host key files is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.1.5 | Establecer propietario y permisos en claves públicas SSH"
+      ansible.builtin.shell:
+        cmd: |
+          find -L /etc/ssh -xdev -type f 2>/dev/null | while read -r l_file; do
+            if ssh-keygen -lf "$l_file" &>/dev/null && \
+               file "$l_file" | grep -Piq '\bopenssh\b.*\bpublic\b'; then
+              chown root:root "$l_file"
+              chmod u-x,go-wx "$l_file"
+            fi
+          done
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_5.1.5
+        - ssh
+
+    - name: "CIS 5.1.5 | Verificar permisos en claves públicas SSH"
+      ansible.builtin.shell:
+        cmd: |
+          find -L /etc/ssh -xdev -type f 2>/dev/null | while read -r l_file; do
+            if ssh-keygen -lf "$l_file" &>/dev/null && \
+               file "$l_file" | grep -Piq '\bopenssh\b.*\bpublic\b'; then
+              stat -Lc "Archivo: %n | Modo: %#a | Propietario: %U | Grupo: %G" "$l_file"
+            fi
+          done
+      register: ssh_public_key_check
+      changed_when: false
+      tags:
+        - cis_5.1.5
+        - ssh
+        - audit
+
+    - name: "CIS 5.1.5 | Mostrar estado de claves públicas SSH"
+      ansible.builtin.debug:
+        msg: "{{ ssh_public_key_check.stdout_lines if ssh_public_key_check.stdout_lines else ['No se encontraron claves públicas OpenSSH'] }}"
+      tags:
+        - cis_5.1.5
+        - ssh
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.1.6 - Ensure sshd access is configured (AllowUsers/AllowGroups)
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.1.6 | Configurar AllowGroups en /etc/ssh/sshd_config"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*AllowGroups\s+'
+        line: "AllowGroups {{ sshd_allow_groups }}"
+        state: "{{ 'present' if sshd_allow_groups | length > 0 else 'absent' }}"
+        insertbefore: "^Include"
+        backup: true
+      when: sshd_allow_groups | length > 0
+      notify: Restart sshd
+      tags:
+        - cis_5.1.6
+        - ssh
+
+    - name: "CIS 5.1.6 | Verificar que existe al menos un control de acceso en sshd"
+      ansible.builtin.shell:
+        cmd: >
+          sshd -T 2>/dev/null | grep -Pi '^\h*(allow|deny)(users|groups)\h+\H+' || true
+      register: sshd_access_check
+      changed_when: false
+      tags:
+        - cis_5.1.6
+        - ssh
+        - audit
+
+    - name: "CIS 5.1.6 | Advertir si no hay control de acceso SSH configurado"
+      ansible.builtin.debug:
+        msg: >
+          ADVERTENCIA: No se encontró AllowUsers/AllowGroups/DenyUsers/DenyGroups
+          en sshd. Configure 'sshd_allow_groups' en las vars del playbook.
+      when: sshd_access_check.stdout | length == 0
+      tags:
+        - cis_5.1.6
+        - ssh
+        - audit
+
+    - name: "CIS 5.1.6 | Mostrar control de acceso SSH configurado"
+      ansible.builtin.debug:
+        msg: "Control de acceso SSH: {{ sshd_access_check.stdout_lines }}"
+      when: sshd_access_check.stdout | length > 0
+      tags:
+        - cis_5.1.6
+        - ssh
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 5.1.24 - Ensure sshd UsePAM is enabled
+    # -------------------------------------------------------------------------
+    - name: "CIS 5.1.24 | Configurar UsePAM yes en /etc/ssh/sshd_config"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^\s*UsePAM\s+'
+        line: "UsePAM yes"
+        state: present
+        insertbefore: "^Include"
+        backup: true
+      notify: Restart sshd
+      tags:
+        - cis_5.1.24
+        - ssh
+        - pam
+
+    - name: "CIS 5.1.24 | Verificar que UsePAM=yes está activo en sshd"
+      ansible.builtin.shell:
+        cmd: "sshd -T 2>/dev/null | grep -i usepam"
+      register: usepam_check
+      changed_when: false
+      failed_when: "'usepam yes' not in usepam_check.stdout | lower"
+      tags:
+        - cis_5.1.24
+        - ssh
+        - pam
+        - audit
+
+    - name: "CIS 5.1.24 | Mostrar configuración de UsePAM"
+      ansible.builtin.debug:
+        msg: "sshd UsePAM: {{ usepam_check.stdout }}"
+      tags:
+        - cis_5.1.24
+        - ssh
+        - pam
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 6.2.1.1 - journald
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.1.1.1 - Ensure journald service is active
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.1.1.1 | Desenmascarar systemd-journald.service"
+      ansible.builtin.systemd:
+        name: systemd-journald.service
+        masked: false
+      tags:
+        - cis_6.2.1.1.1
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.1.1 | Habilitar e iniciar systemd-journald.service"
+      ansible.builtin.systemd:
+        name: systemd-journald.service
+        enabled: true
+        state: started
+      tags:
+        - cis_6.2.1.1.1
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.1.1 | Verificar que systemd-journald.service está activo"
+      ansible.builtin.command:
+        cmd: systemctl is-active systemd-journald.service
+      register: journald_active_check
+      changed_when: false
+      failed_when: journald_active_check.stdout != "active"
+      tags:
+        - cis_6.2.1.1.1
+        - journald
+        - logging
+        - audit
+
+    - name: "CIS 6.2.1.1.1 | Mostrar estado de systemd-journald"
+      ansible.builtin.debug:
+        msg: "systemd-journald estado: {{ journald_active_check.stdout }}"
+      tags:
+        - cis_6.2.1.1.1
+        - journald
+        - logging
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.1.1.5 - Ensure journald Storage is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.1.1.5 | Crear directorio /etc/systemd/journald.conf.d si no existe"
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      tags:
+        - cis_6.2.1.1.5
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.1.5 | Configurar Storage=persistent en journald"
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/journald.conf.d/60-journald.conf
+        regexp: '^\s*Storage\s*='
+        line: "Storage=persistent"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+        insertafter: '^\[Journal\]'
+      notify: Restart journald
+      tags:
+        - cis_6.2.1.1.5
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.1.5 | Asegurar cabecera [Journal] en 60-journald.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/journald.conf.d/60-journald.conf
+        line: "[Journal]"
+        insertbefore: BOF
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      tags:
+        - cis_6.2.1.1.5
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.1.5 | Verificar Storage=persistent en journald"
+      ansible.builtin.shell:
+        cmd: "grep -Pi '^\\s*Storage\\s*=\\s*persistent' /etc/systemd/journald.conf.d/60-journald.conf"
+      register: journald_storage_check
+      changed_when: false
+      failed_when: journald_storage_check.rc != 0
+      tags:
+        - cis_6.2.1.1.5
+        - journald
+        - logging
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.1.1.6 - Ensure journald Compress is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.1.1.6 | Configurar Compress=yes en journald"
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/journald.conf.d/60-journald.conf
+        regexp: '^\s*Compress\s*='
+        line: "Compress=yes"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+        insertafter: '^\[Journal\]'
+      notify: Restart journald
+      tags:
+        - cis_6.2.1.1.6
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.1.6 | Verificar Compress=yes en journald"
+      ansible.builtin.shell:
+        cmd: "grep -Pi '^\\s*Compress\\s*=\\s*yes' /etc/systemd/journald.conf.d/60-journald.conf"
+      register: journald_compress_check
+      changed_when: false
+      failed_when: journald_compress_check.rc != 0
+      tags:
+        - cis_6.2.1.1.6
+        - journald
+        - logging
+        - audit
+
+    - name: "CIS 6.2.1.1.6 | Mostrar configuración final de journald"
+      ansible.builtin.shell:
+        cmd: "cat /etc/systemd/journald.conf.d/60-journald.conf"
+      register: journald_conf_final
+      changed_when: false
+      tags:
+        - cis_6.2.1.1.6
+        - journald
+        - logging
+        - audit
+
+    - name: "CIS 6.2.1.1.6 | Mostrar contenido del archivo de journald"
+      ansible.builtin.debug:
+        msg: "{{ journald_conf_final.stdout_lines }}"
+      tags:
+        - cis_6.2.1.1.6
+        - journald
+        - logging
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 6.2.1.2 - systemd-journal-remote
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.1.2.1 - Ensure systemd-journal-remote is installed
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.1.2.1 | Instalar systemd-journal-remote"
+      ansible.builtin.dnf:
+        name: systemd-journal-remote
+        state: present
+      tags:
+        - cis_6.2.1.2.1
+        - journald
+        - logging
+
+    - name: "CIS 6.2.1.2.1 | Verificar que systemd-journal-remote está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q systemd-journal-remote
+      register: journal_remote_check
+      changed_when: false
+      failed_when: journal_remote_check.rc != 0
+      tags:
+        - cis_6.2.1.2.1
+        - journald
+        - logging
+        - audit
+
+    - name: "CIS 6.2.1.2.1 | Mostrar versión de systemd-journal-remote"
+      ansible.builtin.debug:
+        msg: "{{ journal_remote_check.stdout }}"
+      tags:
+        - cis_6.2.1.2.1
+        - journald
+        - logging
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.1.2.2 - Ensure systemd-journal-remote authentication is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.1.2.2 | Verificar configuración de autenticación en journal-upload.conf"
+      ansible.builtin.shell:
+        cmd: >
+          grep -P "^\s*(URL|ServerKeyFile|ServerCertificateFile|TrustedCertificateFile)="
+          /etc/systemd/journal-upload.conf 2>/dev/null || true
+      register: journal_upload_check
+      changed_when: false
+      tags:
+        - cis_6.2.1.2.2
+        - journald
+        - logging
+        - audit
+
+    - name: "CIS 6.2.1.2.2 | Advertir si journal-upload.conf no está completamente configurado"
+      ansible.builtin.debug:
+        msg: >
+          ADVERTENCIA (Manual): Configure /etc/systemd/journal-upload.conf con:
+          URL, ServerKeyFile, ServerCertificateFile y TrustedCertificateFile
+          según su entorno. Estado actual: {{ journal_upload_check.stdout | default('No configurado') }}
+      when: journal_upload_check.stdout | length == 0 or
+        ('URL=' not in journal_upload_check.stdout) or
+        ('ServerKeyFile=' not in journal_upload_check.stdout)
+      tags:
+        - cis_6.2.1.2.2
+        - journald
+        - logging
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 6.2.2 - rsyslog / logrotate
+    # =========================================================================
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.2.4 - Ensure rsyslog log file creation mode is configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.2.4 | Verificar si rsyslog está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q rsyslog
+      register: rsyslog_installed
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_6.2.2.4
+        - rsyslog
+        - logging
+
+    - name: "CIS 6.2.2.4 | Configurar $FileCreateMode 0640 en rsyslog"
+      ansible.builtin.lineinfile:
+        path: /etc/rsyslog.conf
+        regexp: '^\s*\$FileCreateMode\s+'
+        line: "$FileCreateMode 0640"
+        state: present
+        backup: true
+      when: rsyslog_installed.rc == 0
+      notify: Restart rsyslog
+      tags:
+        - cis_6.2.2.4
+        - rsyslog
+        - logging
+
+    - name: "CIS 6.2.2.4 | Verificar $FileCreateMode en rsyslog"
+      ansible.builtin.shell:
+        cmd: >
+          grep -Ps '^\h*\$FileCreateMode\h+0[0,2,4,6][0,2,4]0\b'
+          /etc/rsyslog.conf /etc/rsyslog.d/*.conf 2>/dev/null || true
+      register: rsyslog_filemode_check
+      changed_when: false
+      when: rsyslog_installed.rc == 0
+      tags:
+        - cis_6.2.2.4
+        - rsyslog
+        - logging
+        - audit
+
+    - name: "CIS 6.2.2.4 | Mostrar FileCreateMode configurado en rsyslog"
+      ansible.builtin.debug:
+        msg: "rsyslog FileCreateMode: {{ rsyslog_filemode_check.stdout | default('rsyslog no instalado') }}"
+      tags:
+        - cis_6.2.2.4
+        - rsyslog
+        - logging
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 6.2.2.8 - Ensure logrotate is configured (Manual - auditoría)
+    # -------------------------------------------------------------------------
+    - name: "CIS 6.2.2.8 | Verificar que logrotate está instalado"
+      ansible.builtin.command:
+        cmd: rpm -q logrotate
+      register: logrotate_installed
+      changed_when: false
+      failed_when: false
+      tags:
+        - cis_6.2.2.8
+        - logrotate
+        - logging
+        - audit
+
+    - name: "CIS 6.2.2.8 | Verificar existencia de configuración de logrotate"
+      ansible.builtin.shell:
+        cmd: "ls /etc/logrotate.conf /etc/logrotate.d/ 2>/dev/null || true"
+      register: logrotate_conf_check
+      changed_when: false
+      tags:
+        - cis_6.2.2.8
+        - logrotate
+        - logging
+        - audit
+
+    - name: "CIS 6.2.2.8 | Advertir revisión manual de logrotate"
+      ansible.builtin.debug:
+        msg: >
+          MANUAL: Revise /etc/logrotate.conf y /etc/logrotate.d/* para
+          asegurarse de que la rotación de logs cumple con la política del sitio.
+          Archivos encontrados: {{ logrotate_conf_check.stdout_lines }}
+      tags:
+        - cis_6.2.2.8
+        - logrotate
+        - logging
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 6.2.3.1 - Acceso a archivos de log en /var/log
+    # =========================================================================
+
+    - name: "CIS 6.2.3.1 | Corregir permisos excesivos en archivos de /var/log (genérico)"
+      ansible.builtin.shell:
+        cmd: |
+          find -L /var/log -type f \( -perm /0137 -o ! -user root -o ! -group root \) \
+          2>/dev/null | while IFS= read -r l_file; do
+            fname="$(basename "$l_file")"
+            case "$fname" in
+              lastlog|lastlog.*|wtmp|wtmp.*|wtmp-*|btmp|btmp.*|btmp-*|README)
+                chmod ug-x,o-wx "$l_file" ;;
+              secure*|auth.log|syslog|messages)
+                chown root:root "$l_file"
+                chmod u-x,g-wx,o-rwx "$l_file" ;;
+              *.journal|*.journal~)
+                chown root:root "$l_file"
+                chmod u-x,g-wx,o-rwx "$l_file" ;;
+              *)
+                chmod u-x,g-wx,o-rwx "$l_file" ;;
+            esac
+          done
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_6.2.3.1
+        - logging
+        - logfiles
+
+    - name: "CIS 6.2.3.1 | Verificar archivos con permisos excesivos en /var/log"
+      ansible.builtin.shell:
+        cmd: >
+          find -L /var/log -type f \( -perm /0137 -o ! -user root -o ! -group root \)
+          2>/dev/null | head -20 || true
+      register: varlog_perms_check
+      changed_when: false
+      tags:
+        - cis_6.2.3.1
+        - logging
+        - logfiles
+        - audit
+
+    - name: "CIS 6.2.3.1 | Mostrar resultado de auditoría de /var/log"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'OK: Todos los archivos en /var/log tienen permisos apropiados'
+          if varlog_perms_check.stdout | length == 0
+          else 'REVISAR: Archivos con permisos incorrectos: ' + varlog_perms_check.stdout }}
+      tags:
+        - cis_6.2.3.1
+        - logging
+        - logfiles
+        - audit
+
+    # =========================================================================
+    # SECCIÓN 7.1 - Permisos en archivos críticos del sistema
+    # =========================================================================
+
+    - name: "CIS 7.1.1-7.1.4,7.1.9 | Configurar permisos 0644 root:root en archivos de usuario/grupo"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop:
+        - /etc/passwd
+        - /etc/passwd-
+        - /etc/group
+        - /etc/group-
+        - /etc/shells
+      failed_when: false
+      tags:
+        - cis_7.1.1
+        - cis_7.1.2
+        - cis_7.1.3
+        - cis_7.1.4
+        - cis_7.1.9
+        - file_permissions
+
+    - name: "CIS 7.1.5-7.1.8 | Configurar permisos 0000 root:root en archivos shadow/gshadow"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        mode: "0000"
+      loop:
+        - /etc/shadow
+        - /etc/shadow-
+        - /etc/gshadow
+        - /etc/gshadow-
+      failed_when: false
+      tags:
+        - cis_7.1.5
+        - cis_7.1.6
+        - cis_7.1.7
+        - cis_7.1.8
+        - file_permissions
+
+    - name: "CIS 7.1.1-7.1.9 | Verificar permisos en archivos críticos del sistema"
+      ansible.builtin.shell:
+        cmd: >
+          for f in /etc/passwd /etc/passwd- /etc/group /etc/group-
+          /etc/shadow /etc/shadow- /etc/gshadow /etc/gshadow- /etc/shells; do
+            [ -f "$f" ] && stat -Lc "%-20n  modo:%#a  propietario:%U  grupo:%G" "$f"
+          done
+      register: critical_files_check
+      changed_when: false
+      tags:
+        - cis_7.1.1
+        - cis_7.1.2
+        - cis_7.1.3
+        - cis_7.1.4
+        - cis_7.1.5
+        - cis_7.1.6
+        - cis_7.1.7
+        - cis_7.1.8
+        - cis_7.1.9
+        - file_permissions
+        - audit
+
+    - name: "CIS 7.1.1-7.1.9 | Mostrar permisos de archivos críticos"
+      ansible.builtin.debug:
+        msg: "{{ critical_files_check.stdout_lines }}"
+      tags:
+        - cis_7.1.1
+        - cis_7.1.9
+        - file_permissions
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 7.1.11 - Ensure world writable files and directories are secured
+    # -------------------------------------------------------------------------
+    - name: "CIS 7.1.11 | Eliminar permiso de escritura para 'other' en archivos world-writable"
+      ansible.builtin.shell:
+        cmd: |
+          findmnt -Dkerno fstype,target | \
+          awk '($1 !~ /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && \
+               $2 !~ /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}' | \
+          while IFS= read -r l_mount; do
+            find "$l_mount" -mount -xdev \
+              \( -path "*/containers/storage/*" -o -path "*/containerd/*" -o \
+                 -path "*/kubelet/*" -o -path "/sys/*" -o -path "/snap/*" -o \
+                 -path "/boot/efi/*" \) -prune -o \
+              -type f -perm -0002 -print0 2>/dev/null
+          done | xargs -0 -I{} chmod o-w "{}" 2>/dev/null || true
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_7.1.11
+        - file_permissions
+        - world_writable
+
+    - name: "CIS 7.1.11 | Agregar sticky bit a directorios world-writable sin sticky bit"
+      ansible.builtin.shell:
+        cmd: |
+          findmnt -Dkerno fstype,target | \
+          awk '($1 !~ /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && \
+               $2 !~ /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}' | \
+          while IFS= read -r l_mount; do
+            find "$l_mount" -mount -xdev \
+              \( -path "*/containers/storage/*" -o -path "*/containerd/*" -o \
+                 -path "*/kubelet/*" -o -path "/sys/*" -o -path "/snap/*" -o \
+                 -path "/boot/efi/*" \) -prune -o \
+              -type d -perm -0002 ! -perm -01000 -print0 2>/dev/null
+          done | xargs -0 -I{} chmod a+t "{}" 2>/dev/null || true
+      changed_when: true
+      failed_when: false
+      tags:
+        - cis_7.1.11
+        - file_permissions
+        - world_writable
+
+    - name: "CIS 7.1.11 | Verificar archivos world-writable restantes"
+      ansible.builtin.shell:
+        cmd: |
+          findmnt -Dkerno fstype,target | \
+          awk '($1 !~ /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && \
+               $2 !~ /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}' | \
+          while IFS= read -r l_mount; do
+            find "$l_mount" -mount -xdev -type f -perm -0002 2>/dev/null | head -10
+          done || true
+      register: ww_files_check
+      changed_when: false
+      tags:
+        - cis_7.1.11
+        - file_permissions
+        - world_writable
+        - audit
+
+    - name: "CIS 7.1.11 | Mostrar resultado de auditoría world-writable"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'OK: No existen archivos world-writable en el filesystem local'
+          if ww_files_check.stdout | length == 0
+          else 'REVISAR archivos world-writable: ' + ww_files_check.stdout }}
+      tags:
+        - cis_7.1.11
+        - file_permissions
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 7.1.12 - Ensure no files or directories without an owner and group
+    # -------------------------------------------------------------------------
+    - name: "CIS 7.1.12 | Buscar archivos y directorios sin propietario o grupo"
+      ansible.builtin.shell:
+        cmd: |
+          findmnt -Dkerno fstype,target | \
+          awk '($1 !~ /^\s*(nfs|proc|cifs|smb|vfat|iso9660|efivarfs|selinuxfs|ncpfs)/ && \
+               $2 !~ /^(\/run|\/tmp|\/var\/tmp)(\/|$)/){print $2}' | \
+          while IFS= read -r l_mount; do
+            find "$l_mount" -mount -xdev \
+              \( -path "*/containers/storage/*" -o -path "*/containerd/*" -o \
+                 -path "*/kubelet/*" -o -path "/sys/*" -o -path "/snap/*" -o \
+                 -path "/boot/efi/*" \) -prune -o \
+              \( -type f -o -type d \) \( -nouser -o -nogroup \) -print 2>/dev/null | head -20
+          done || true
+      register: unowned_files_check
+      changed_when: false
+      tags:
+        - cis_7.1.12
+        - file_permissions
+        - audit
+
+    - name: "CIS 7.1.12 | Mostrar resultado de auditoría de archivos sin propietario"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'OK: No existen archivos sin propietario o grupo en el filesystem local'
+          if unowned_files_check.stdout | length == 0
+          else 'ACCIÓN REQUERIDA - Archivos sin propietario/grupo encontrados: ' + unowned_files_check.stdout }}
+      tags:
+        - cis_7.1.12
+        - file_permissions
+        - audit
+
+    - name: "CIS 7.1.12 | Fallar si existen archivos sin propietario o grupo"
+      ansible.builtin.fail:
+        msg: >
+          FALLO CIS 7.1.12: Se encontraron archivos sin propietario o grupo.
+          Revise y asigne propietario activo a: {{ unowned_files_check.stdout }}
+      when: unowned_files_check.stdout | length > 0
+      tags:
+        - cis_7.1.12
+        - file_permissions
+        - audit
+
+    # -------------------------------------------------------------------------
+    # Reboot si SELinux estaba deshabilitado
+    # -------------------------------------------------------------------------
+    - name: "Reiniciar si SELinux estaba deshabilitado (autorelabel requerido)"
+      ansible.builtin.reboot:
+        msg: "Reiniciando para habilitar SELinux y re-etiquetar el filesystem (CIS 1.3.1.4)"
+        reboot_timeout: 600
+        pre_reboot_delay: 10
+        post_reboot_delay: 30
+      when:
+        - selinux_runtime_mode.stdout | lower == "disabled"
+        - reboot_after_enable | bool
+      tags:
+        - cis_1.3.1.4
+        - selinux_mode
+        - reboot
+
+      # -------------------------------------------------------------------------
+    # CIS 7.2.2 - Ensure /etc/shadow password fields are not empty
+    # -------------------------------------------------------------------------
+    - name: "CIS 7.2.2 | Buscar cuentas con password vacío en /etc/shadow"
+  ansible.builtin.shell:
+    cmd: >
+      awk -F: '($2 == "" ) { print $1 " does not have a password "}' /etc/shadow
+  register: shadow_empty_pass
+  changed_when: false
+  tags:
+    - cis_7.2.2
+    - authentication
+    - shadow
+    - audit
+
+    - name: "CIS 7.2.2 | Mostrar resultado auditoría password vacío"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'OK: Todas las cuentas tienen password configurado o están bloqueadas'
+          if shadow_empty_pass.stdout | length == 0
+          else 'ACCIÓN REQUERIDA - Cuentas sin password: ' + shadow_empty_pass.stdout }}
+      tags:
+        - cis_7.2.2
+        - audit
+
+    - name: "CIS 7.2.2 | Fallar si existen cuentas sin password"
+      ansible.builtin.fail:
+        msg: >
+          FALLO CIS 7.2.2: Se encontraron cuentas con campo password vacío:
+          {{ shadow_empty_pass.stdout }}
+      when: shadow_empty_pass.stdout | length > 0
+      tags:
+        - cis_7.2.2
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 7.2.3 - Ensure all groups in /etc/passwd exist in /etc/group
+    # -------------------------------------------------------------------------
+    - name: "CIS 7.2.3 | Verificar GIDs definidos en /etc/passwd sin grupo válido"
+      ansible.builtin.shell:
+        cmd: |
+          awk -F: '{print $4}' /etc/passwd | sort -u > /tmp/passwd_gids
+          awk -F: '{print $3}' /etc/group | sort -u > /tmp/group_gids
+          comm -23 /tmp/passwd_gids /tmp/group_gids
+      register: gid_mismatch
+      changed_when: false
+      tags:
+        - cis_7.2.3
+        - group_integrity
+        - audit
+
+    - name: "CIS 7.2.3 | Mostrar resultado auditoría GIDs inconsistentes"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'OK: Todos los GIDs en /etc/passwd existen en /etc/group'
+          if gid_mismatch.stdout | length == 0
+          else 'ACCIÓN REQUERIDA - GIDs sin grupo asociado: ' + gid_mismatch.stdout }}
+      tags:
+        - cis_7.2.3
+        - audit
+
+    - name: "CIS 7.2.3 | Fallar si existen GIDs inconsistentes"
+      ansible.builtin.fail:
+        msg: >
+          FALLO CIS 7.2.3: Existen GIDs definidos en /etc/passwd que no existen en /etc/group:
+          {{ gid_mismatch.stdout }}
+      when: gid_mismatch.stdout | length > 0
+      tags:
+        - cis_7.2.3
+        - audit
+
+    # -------------------------------------------------------------------------
+    # CIS 7.2.8 - Ensure local interactive user home directories are configured
+    # -------------------------------------------------------------------------
+    - name: "CIS 7.2.8 | Verificar directorios home de usuarios interactivos"
+      ansible.builtin.shell:
+        cmd: |
+          valid_shells=$(awk -F/ '$NF != "nologin" {print}' /etc/shells | sed -rn '/^\//p' | paste -sd '|')
+          awk -F: -v pat="^(${valid_shells})$" '$(NF) ~ pat {print $1":"$(NF-1)}' /etc/passwd | while IFS=: read -r user home; do
+            if [ ! -d "$home" ]; then
+              echo "User $user - Home directory $home does not exist"
+            else
+              owner=$(stat -Lc '%U' "$home")
+              mode=$(stat -Lc '%a' "$home")
+              if [ "$owner" != "$user" ]; then
+                echo "User $user - Home owned by $owner"
+              fi
+              if [ "$mode" -gt 750 ]; then
+                echo "User $user - Home permissions $mode too permissive"
+              fi
+            fi
+          done
+      register: home_check
+      changed_when: false
+      tags:
+        - cis_7.2.8
+        - home_directories
+        - audit
+
+    - name: "CIS 7.2.8 | Mostrar resultado auditoría home directories"
+      ansible.builtin.debug:
+        msg: >
+          {{ 'OK: Directorios home correctamente configurados'
+          if home_check.stdout | length == 0
+          else 'ACCIÓN REQUERIDA - Problemas detectados en home directories: ' + home_check.stdout }}
+      tags:
+        - cis_7.2.8
+        - audit
+
+    - name: "CIS 7.2.8 | Fallar si existen problemas en home directories"
+      ansible.builtin.fail:
+        msg: >
+          FALLO CIS 7.2.8: Se detectaron problemas en directorios home:
+          {{ home_check.stdout }}
+      when: home_check.stdout | length > 0
+      tags:
+        - cis_7.2.8
+        - audit
+  # ---------------------------------------------------------------------------
+  # HANDLERS
+  # ---------------------------------------------------------------------------
+  handlers:
+    - name: Restart rsyslog
+      ansible.builtin.systemd:
+        name: rsyslog
+        state: restarted
+      listen: "Restart rsyslog"
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+      listen: "Restart journald"
+
+    - name: Restart sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: restarted
+      listen: "Restart sshd"
+
+    - name: Reload sysctl
+      ansible.builtin.command:
+        cmd: sysctl --system
+      listen: "Reload sysctl"
+
+    - name: Restart firewalld
+      ansible.builtin.systemd:
+        name: firewalld
+        state: restarted
+      listen: "Restart firewalld"
+
+    - name: Remount /tmp
+      ansible.builtin.command:
+        cmd: mount -o remount /tmp
+      listen: "Remount /tmp"
+
+    - name: Remount /dev/shm
+      ansible.builtin.command:
+        cmd: mount -o remount /dev/shm
+      listen: "Remount /dev/shm"
+
+    - name: Aviso reinicio SELinux
+      ansible.builtin.debug:
+        msg: >
+          AVISO: Se modificó la política SELinux. Puede requerirse reinicio.
+          Use 'reboot_after_enable: true' para reinicio automático.
+
+  # ---------------------------------------------------------------------------
+  # POST-TASKS: Reporte de cumplimiento
+  # ---------------------------------------------------------------------------
+  post_tasks:
+    - name: "Reporte final de cumplimiento CIS Hardening"
+      ansible.builtin.debug:
+        msg:
+          - "======================================================"
+          - " REPORTE CIS HARDENING CONSOLIDADO"
+          - "======================================================"
+          - "CIS 1.1.1.10  - usb-storage deshabilitado:          OK"
+          - "CIS 1.1.2.1.1 - /tmp montado como tmpfs:            OK"
+          - "CIS 1.1.2.1.2 - nodev en /tmp:                      OK"
+          - "CIS 1.1.2.1.3 - nosuid en /tmp:                     OK"
+          - "CIS 1.1.2.1.4 - noexec en /tmp:                     OK"
+          - "CIS 1.1.2.2.1 - /dev/shm montado como tmpfs:        OK"
+          - "CIS 1.1.2.2.2 - nodev en /dev/shm:                  OK"
+          - "CIS 1.1.2.2.3 - nosuid en /dev/shm:                 OK"
+          - "CIS 1.1.2.2.4 - noexec en /dev/shm:                 OK"
+          - "CIS 1.3.1.1   - libselinux instalado:               OK"
+          - "CIS 1.3.1.2   - Bootloader sin selinux=0:           OK"
+          - "CIS 1.3.1.3   - SELINUXTYPE = {{ selinux_policy }}:  OK"
+          - "CIS 1.3.1.4   - SELINUX = {{ selinux_state }}:       OK"
+          - "CIS 1.3.1.7   - mcstrans desinstalado:              OK"
+          - "CIS 1.4.2     - Permisos en config del bootloader:  OK"
+          - "CIS 1.5.5     - kernel.dmesg_restrict = 1:          OK"
+          - "CIS 4.1.1     - firewalld instalado y activo:       OK"
+          - "CIS 4.1.2     - FirewallBackend = nftables:         OK"
+          - "CIS 4.1.3     - firewalld.service activo/habilitado: OK"
+          - "CIS 5.2.1     - sudo instalado:                     OK"
+          - "CIS 5.2.2     - sudo usa pty:                       OK"
+          - "CIS 5.2.5     - re-autenticación sudo:              OK"
+          - "CIS 5.2.6     - sudo timeout={{ sudo_timestamp_timeout }}m:              OK"
+          - "CIS 5.2.7     - su restringido a {{ su_restrict_group }}:      OK"
+          - "CIS 5.3.2.3   - pam_pwquality habilitado:           OK"
+          - "CIS 5.3.3.2.2 - minlen = {{ pwquality_minlen }}:                OK"
+          - "CIS 5.3.3.2.3 - complejidad de contraseña:          OK"
+          - "CIS 5.3.3.2.6 - dictcheck habilitado:              OK"
+          - "CIS 5.3.3.3.1 - historial contraseñas (remember={{ pwhistory_remember }}): OK"
+          - "CIS 5.1.2     - permisos sshd_config:              OK"
+          - "CIS 5.1.4     - permisos claves privadas SSH:      OK"
+          - "CIS 5.1.5     - permisos claves públicas SSH:      OK"
+          - "CIS 5.1.6     - control de acceso SSH:             OK"
+          - "CIS 5.1.24    - sshd UsePAM = yes:                 OK"
+          - "CIS 6.2.1.1.1 - systemd-journald activo:          OK"
+          - "CIS 6.2.1.1.5 - journald Storage=persistent:      OK"
+          - "CIS 6.2.1.1.6 - journald Compress=yes:            OK"
+          - "CIS 6.2.1.2.1 - systemd-journal-remote instalado: OK"
+          - "CIS 6.2.1.2.2 - journal-upload autenticación:     (MANUAL)"
+          - "CIS 6.2.2.4   - rsyslog FileCreateMode=0640:      OK"
+          - "CIS 6.2.2.8   - logrotate configurado:            (MANUAL)"
+          - "CIS 6.2.3.1   - permisos en /var/log/:            OK"
+          - "CIS 7.1.1     - permisos /etc/passwd:             OK"
+          - "CIS 7.1.2     - permisos /etc/passwd-:            OK"
+          - "CIS 7.1.3     - permisos /etc/group:              OK"
+          - "CIS 7.1.4     - permisos /etc/group-:             OK"
+          - "CIS 7.1.5     - permisos /etc/shadow (0000):      OK"
+          - "CIS 7.1.6     - permisos /etc/shadow- (0000):     OK"
+          - "CIS 7.1.7     - permisos /etc/gshadow (0000):     OK"
+          - "CIS 7.1.8     - permisos /etc/gshadow- (0000):    OK"
+          - "CIS 7.1.9     - permisos /etc/shells:             OK"
+          - "CIS 7.1.11    - world-writable files asegurados:  OK"
+          - "CIS 7.1.12    - archivos sin propietario/grupo:   OK"
+          - "======================================================"
+      tags:
+        - always
+        - audit

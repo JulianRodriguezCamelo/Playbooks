@@ -137,7 +137,6 @@
     modprobe_dir: /etc/modprobe.d
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Verificar que modprobe está disponible
     # --------------------------------------------------------------------------
@@ -156,7 +155,7 @@
         create: true
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         marker: "# {mark} ANSIBLE MANAGED - CIS 1.1.1 - {{ item.name }}"
         block: |
           # {{ item.description }}
@@ -192,7 +191,7 @@
         label: "{{ item.name }}"
       register: lsmod_check
       changed_when: false
-      failed_when: lsmod_check.rc == 0  # rc=0 significa que el módulo SÍ está cargado (fallo)
+      failed_when: lsmod_check.rc == 0 # rc=0 significa que el módulo SÍ está cargado (fallo)
       ignore_errors: true
 
     - name: Verificar que install está configurado como /bin/false
@@ -264,7 +263,6 @@
         mitre: "T1548.001/TA0005/M1022"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Verificar si /tmp está montado como partición independiente
     # --------------------------------------------------------------------------
@@ -406,7 +404,6 @@
         mitre: "T1548.001/TA0005/M1038"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Auditoría previa: verificar opciones faltantes en /dev/shm
     # --------------------------------------------------------------------------
@@ -534,7 +531,6 @@
     grub_password_hash: "{{ grub_password_pbkdf2 | default('') }}"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Auditoría: verificar si ya existe superuser y password en grub.cfg
     # --------------------------------------------------------------------------
@@ -577,7 +573,7 @@
         dest: "{{ grub_custom_cfg }}"
         owner: root
         group: root
-        mode: '0700'
+        mode: "0700"
         content: |
           #!/bin/sh
           # CIS 1.4.1 - Bootloader password - Gestionado por Ansible
@@ -626,7 +622,6 @@
   gather_facts: true
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Auditoría: verificar si root tiene contraseña configurada
     # --------------------------------------------------------------------------
@@ -671,7 +666,7 @@
         - root_password_check.stdout != 'password_set'
         - root_password_hash is defined
         - root_password_hash != ''
-      no_log: true  # No registrar la contraseña en los logs
+      no_log: true # No registrar la contraseña en los logs
 
     # --------------------------------------------------------------------------
     # Verificación final
@@ -718,7 +713,6 @@
         mitre: "T1055/TA0002/M1050"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Auditoría: verificar parámetros en la configuración activa del kernel
     # --------------------------------------------------------------------------
@@ -755,7 +749,7 @@
         dest: "{{ sysctl_config_file }}"
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         content: |
           # ==========================================================
           # CIS Benchmark - Hardening de parámetros del kernel
@@ -951,7 +945,6 @@
         nist: "CM-7"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Solo aplica a sistemas Debian/Ubuntu
     # --------------------------------------------------------------------------
@@ -1077,7 +1070,6 @@
     postfix_inet_interfaces: loopback-only
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Verificar si Postfix está instalado
     # --------------------------------------------------------------------------
@@ -1130,7 +1122,7 @@
       ansible.builtin.replace:
         path: "{{ postfix_main_cf }}"
         regexp: '^\s*inet_interfaces\s*=.*$'
-        replace: 'inet_interfaces = loopback-only'
+        replace: "inet_interfaces = loopback-only"
         backup: true
       when:
         - postfix_installed.stdout == 'installed'
@@ -1142,8 +1134,8 @@
       ansible.builtin.lineinfile:
         path: "{{ postfix_main_cf }}"
         regexp: '^\s*inet_interfaces\s*='
-        line: 'inet_interfaces = loopback-only'
-        insertafter: '# RECEIVING MAIL'
+        line: "inet_interfaces = loopback-only"
+        insertafter: "# RECEIVING MAIL"
         state: present
         backup: true
       when:
@@ -1197,7 +1189,6 @@
   gather_facts: true
 
   tasks:
-
     # --------------------------------------------------------------------------
     # CIS 3.1.2 - Interfaces wireless
     # --------------------------------------------------------------------------
@@ -1227,7 +1218,7 @@
         create: true
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       loop: "{{ wireless_modules.stdout_lines }}"
       when:
         - wireless_modules.stdout != 'none'
@@ -1242,7 +1233,7 @@
         create: true
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
       loop: "{{ wireless_modules.stdout_lines }}"
       when:
         - wireless_modules.stdout != 'none'
@@ -1358,7 +1349,6 @@
         flush_cmd: "sysctl -w net.ipv6.route.flush=1"
 
   tasks:
-
     - name: Auditar parámetros sysctl de red del host
       ansible.builtin.shell: |
         ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
@@ -1391,7 +1381,7 @@
         dest: "{{ sysctl_net_host_file }}"
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         content: |
           # ===========================================================
           # CIS Benchmark - Parámetros de red del host
@@ -1533,7 +1523,6 @@
         flush_cmd: "sysctl -w net.ipv4.route.flush=1"
 
   tasks:
-
     - name: Auditar parámetros sysctl de red (host y router)
       ansible.builtin.shell: |
         ipv6_disabled=$(grep -qs '^\s*0\b' /sys/module/ipv6/parameters/disable && echo "yes" || echo "no")
@@ -1566,7 +1555,7 @@
         dest: "{{ sysctl_net_router_file }}"
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         content: |
           # ===========================================================
           # CIS Benchmark - Parámetros de red (host y router)
@@ -1696,7 +1685,6 @@
         mask: "0137"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Auditoría previa
     # --------------------------------------------------------------------------
@@ -1865,7 +1853,6 @@
     su_restrict_group: "{{ su_group_name | default('sugroup') }}"
 
   tasks:
-
     # ==========================================================================
     # CIS 4.3.2 - sudo use_pty
     # ==========================================================================
@@ -1889,7 +1876,7 @@
         dest: "{{ sudoers_cis_file }}"
         owner: root
         group: root
-        mode: '0440'
+        mode: "0440"
         content: |
           # ============================================================
           # CIS 4.3.2 - sudo debe ejecutarse desde pseudo-terminal (pty)
@@ -1973,7 +1960,7 @@
         path: "{{ su_pam_file }}"
         regexp: '^\s*#?\s*auth\s+(required|requisite)\s+pam_wheel\.so.*'
         line: "auth           required        pam_wheel.so use_uid group={{ su_restrict_group }}"
-        insertafter: '^# Uncomment this to force users to be a member'
+        insertafter: "^# Uncomment this to force users to be a member"
         state: present
         backup: true
       when: su_pam_audit.stdout == 'FAIL'
@@ -2029,7 +2016,6 @@
     umask_profile_file: /etc/profile.d/50-cis_umask.sh
 
   tasks:
-
     # ==========================================================================
     # CIS 4.5.2 - Cuentas de sistema: shell nologin + bloqueadas
     # ==========================================================================
@@ -2185,7 +2171,7 @@
         dest: "{{ umask_profile_file }}"
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         content: |
           # ============================================================
           # CIS 4.5.4 - umask por defecto 027 (o más restrictivo)
@@ -2250,7 +2236,6 @@
     journald_conf_file: /etc/systemd/journald.conf.d/50-cis_persistent.conf
 
   tasks:
-
     - name: Auditar Storage=persistent en journald
       ansible.builtin.shell: |
         grep -Psi '^\s*Storage\s*=\s*persistent\b' \
@@ -2272,14 +2257,14 @@
         state: directory
         owner: root
         group: root
-        mode: '0755'
+        mode: "0755"
 
     - name: Crear configuración journald con Storage=persistent
       ansible.builtin.copy:
         dest: "{{ journald_conf_file }}"
         owner: root
         group: root
-        mode: '0644'
+        mode: "0644"
         content: |
           # ============================================================
           # CIS 5.1.1.4 - journald: escritura persistente en disco
@@ -2341,7 +2326,7 @@
         owner: root
         group: root
         mode: "0644"
-        mode_mask: "0133"    # u-x,go-wx
+        mode_mask: "0133" # u-x,go-wx
       - cis_control: "6.1.2"
         path: /etc/passwd-
         owner: root
@@ -2365,7 +2350,7 @@
         owner: root
         group: shadow
         mode: "0640"
-        mode_mask: "0137"    # u-x,g-wx,o-rwx
+        mode_mask: "0137" # u-x,g-wx,o-rwx
       - cis_control: "6.1.6"
         path: /etc/shadow-
         owner: root
@@ -2394,7 +2379,6 @@
         description: "Asegurar permisos en la lista de shells válidos"
 
   tasks:
-
     # --------------------------------------------------------------------------
     # Auditoría previa
     # --------------------------------------------------------------------------
@@ -2487,7 +2471,6 @@
   gather_facts: true
 
   tasks:
-
     # --------------------------------------------------------------------------
     # CIS 6.1.10 - Permisos en /etc/security/opasswd y opasswd.old
     # --------------------------------------------------------------------------
@@ -2506,7 +2489,7 @@
         path: "{{ item.item }}"
         owner: root
         group: root
-        mode: '0600'
+        mode: "0600"
       loop: "{{ opasswd_audit.results }}"
       when: item.stat.exists
       loop_control:
@@ -2534,7 +2517,7 @@
         a_path=(! -path "/run/user/*" -a ! -path "/proc/*" -a ! -path "*/containerd/*" -a ! -path "*/kubelet/pods/*" -a ! -path "/sys/kernel/security/apparmor/*" -a ! -path "/snap/*" -a ! -path "/sys/fs/cgroup/memory/*")
         a_file=()
         a_dir=()
-        
+
         while read -r l_mount; do
           while IFS= read -r -d $'\0' l_file; do
             if [ -e "$l_file" ]; then
@@ -2546,15 +2529,15 @@
             fi
           done < <(find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o \( -type f -o -type d \) -perm -0002 -print0 2>/dev/null)
         done < <(findmnt -Dkerno fstype,target | awk '$1 !~ /^\s*(nfs|proc|smb)/ {print $2}')
-        
+
         if (( ${#a_file[@]} > 0 )); then
           l_output2="$l_output2\n- World writable files found:\n$(printf '%s\n' "${a_file[@]}")"
         fi
-        
+
         if (( ${#a_dir[@]} > 0 )); then
           l_output2="$l_output2\n- World writable directories without sticky bit found:\n$(printf '%s\n' "${a_dir[@]}")"
         fi
-        
+
         if [ -z "$l_output2" ]; then
           echo -e "\n- Audit Result: ** PASS **\n- No se encontraron archivos o directorios world-writable inseguros."
         else
@@ -2573,7 +2556,7 @@
         #!/usr/bin/env bash
         l_smask='01000'
         a_path=(! -path "/run/user/*" -a ! -path "/proc/*" -a ! -path "*/containerd/*" -a ! -path "*/kubelet/pods/*" -a ! -path "/sys/kernel/security/apparmor/*" -a ! -path "/snap/*" -a ! -path "/sys/fs/cgroup/memory/*")
-        
+
         while read -r l_mount; do
           find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o -type f -perm -0002 -print0 2>/dev/null | xargs -0 --no-run-if-empty chmod o-w
           find "$l_mount" -mount -xdev \( "${a_path[@]}" \) -prune -o -type d \( -perm -0002 -a ! -perm -1000 \) -print0 2>/dev/null | xargs -0 --no-run-if-empty chmod a+t
@@ -2625,18 +2608,19 @@
           when: root_path_check.stdout != ""
 
     - name: "6.2.10 Ensure root is the only UID 0 account (Automated)"
-      block:
-        - name: "Check for UID 0 accounts"
-          shell: awk -F: '($3 == 0) { print $1 }' /etc/passwd
-          register: uid_zero_accounts
-          changed_when: false
+  block:
+    - name: "Check for UID 0 accounts"
+      shell: |
+        awk -F: '($3 == 0) { print $1 }' /etc/passwd
+      register: uid_zero_accounts
+      changed_when: false
 
-        - name: "Verify only root has UID 0"
-          assert:
-            that:
-              - uid_zero_accounts.stdout == 'root'
-            fail_msg: "Found non-root accounts with UID 0: {{ uid_zero_accounts.stdout }}"
-            success_msg: "Only root has UID 0."
+    - name: "Verify only root has UID 0"
+      assert:
+        that:
+          - uid_zero_accounts.stdout == 'root'
+        fail_msg: "Found non-root accounts with UID 0: {{ uid_zero_accounts.stdout }}"
+        success_msg: "Only root has UID 0."
 
     - name: "6.2.12 Ensure local interactive user dot files access is configured (Automated)"
       block:
@@ -2644,7 +2628,7 @@
           shell: |
             #!/usr/bin/env bash
             l_valid_shells="^($( awk -F\/ '$NF != "nologin" {print}' /etc/shells | sed -rn '/^\//{s,/,\\\\/,g;p}' | paste -s -d '|' - ))$"
-            
+
             awk -v pat="$l_valid_shells" -F: '$(NF) ~ pat { print $1 " " $(NF-1) }' /etc/passwd | while read -r l_user l_home; do
               if [ -d "$l_home" ]; then
                 l_group="$(id -gn "$l_user" | xargs)"
