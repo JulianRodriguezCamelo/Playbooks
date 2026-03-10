@@ -1,0 +1,3091 @@
+---
+# =============================================================================
+# Ansible Playbook: CIS Benchmark — Ubuntu/Debian Hardening
+# =============================================================================
+# Controls:
+#   1.1.2.1.2 - Ensure nodev  option set on /tmp partition        (Automated)
+#   1.1.2.1.3 - Ensure nosuid option set on /tmp partition        (Automated)
+#   1.1.2.1.4 - Ensure noexec option set on /tmp partition        (Automated)
+#   1.2.1.1   - Ensure GPG keys are configured                    (Manual)
+#   1.2.1.2   - Ensure package manager repositories are configured (Manual)
+#   1.2.2.1   - Ensure updates, patches & security software installed (Manual)
+#   1.3.1.1   - Ensure AppArmor packages are installed            (Automated)
+#   1.3.1.2   - Ensure AppArmor is enabled                        (Automated)
+#   1.3.1.3   - Ensure all AppArmor profiles are not disabled     (Automated)
+#   1.3.1.4   - Ensure all AppArmor profiles are enforcing        (Automated)
+#   1.4.1     - Ensure bootloader password is set                 (Automated)
+#   1.4.2     - Ensure access to bootloader config is configured   (Automated)
+#   1.6.4     - Ensure access to /etc/motd is configured          (Automated)
+#   1.6.5     - Ensure access to /etc/issue is configured         (Automated)
+#   1.6.6     - Ensure access to /etc/issue.net is configured     (Automated)
+#   4.1.1     - Ensure ufw is installed                           (Automated)
+#   4.1.2     - Ensure ufw service is configured                  (Automated)
+#   4.1.3     - Ensure ufw incoming default is deny               (Automated)
+#   4.1.4     - Ensure ufw outgoing default is deny               (Automated)
+#   4.1.5     - Ensure ufw routed default is deny                 (Automated)
+#   5.1.1     - Ensure access to /etc/ssh/sshd_config configured  (Automated)
+#   5.1.2     - Ensure SSH private host key permissions           (Automated)
+#   5.1.3     - Ensure SSH public host key permissions            (Automated)
+#   5.1.4     - Ensure sshd access is configured                  (Automated)
+#   5.1.5     - Ensure sshd Banner is configured                  (Automated)
+#   5.1.9     - Ensure sshd GSSAPIAuthentication is disabled      (Automated)
+#   5.1.10    - Ensure sshd HostbasedAuthentication is disabled   (Automated)
+#   5.1.11    - Ensure sshd IgnoreRhosts is enabled               (Automated)
+#   5.1.19    - Ensure sshd PermitEmptyPasswords is disabled      (Automated)
+#   5.1.20    - Ensure sshd PermitRootLogin is disabled           (Automated)
+#   5.1.22    - Ensure sshd UsePAM is enabled                     (Automated)
+#   5.2.1     - Ensure sudo is installed                          (Automated)
+#   5.2.2     - Ensure sudo commands use pty                      (Automated)
+#   5.2.4     - Ensure users must provide password for escalation (Automated)
+#   5.2.5     - Ensure re-authentication for escalation not disabled (Automated)
+#   5.2.6     - Ensure sudo timestamp_timeout is configured       (Automated)
+#   5.2.7     - Ensure access to su command is restricted         (Automated)
+#   5.3.1.3   - Ensure libpam-pwquality is installed             (Automated)
+#   5.3.2.1   - Ensure pam_unix module is enabled                (Automated)
+#   5.3.2.2   - Ensure pam_faillock module is enabled            (Automated)
+#   5.3.2.3   - Ensure pam_pwquality module is enabled           (Automated)
+#   5.3.2.4   - Ensure pam_pwhistory module is enabled           (Automated)
+#   5.3.3.1.1 - Ensure password failed attempts lockout configured (Automated)
+#   5.3.3.1.2 - Ensure password unlock time is configured        (Automated)
+#   5.3.3.2.1 - Ensure password changed characters is configured (Automated)
+#   5.3.3.2.2 - Ensure minimum password length is configured     (Automated)
+#   5.3.3.2.3 - Ensure password complexity is configured         (Manual)
+#   5.3.3.3.1 - Ensure password history remember is configured   (Automated)
+#   5.3.3.4.1 - Ensure pam_unix does not include nullok          (Automated)
+#   5.4.2.2   - Ensure root is the only GID 0 account            (Automated)
+#   5.4.2.4   - Ensure root account access is controlled         (Automated)
+#   5.4.2.7   - Ensure system accounts do not have valid login shell (Automated)
+#   5.4.2.8   - Ensure accounts without valid login shell are locked (Automated)
+#   6.1.1.1.1 - Ensure journald service is active                (Automated)
+#   6.1.1.1.4 - Ensure journald ForwardToSyslog is disabled      (Automated)
+#   6.1.1.1.5 - Ensure journald Storage is configured            (Automated)
+#   6.1.1.1.6 - Ensure journald Compress is configured           (Automated)
+#   6.1.2.2   - Ensure rsyslog service is enabled and active     (Automated)
+#   6.1.2.3   - Ensure journald sends logs to rsyslog            (Automated)
+#   7.1.1     - Ensure access to /etc/passwd is configured       (Automated)
+#   7.1.2     - Ensure access to /etc/passwd- is configured      (Automated)
+#   7.1.3     - Ensure access to /etc/group is configured        (Automated)
+#   7.1.4     - Ensure access to /etc/group- is configured       (Automated)
+#   7.1.5     - Ensure access to /etc/shadow is configured       (Automated)
+#   7.1.6     - Ensure access to /etc/shadow- is configured      (Automated)
+#   7.1.7     - Ensure access to /etc/gshadow is configured      (Automated)
+#   7.1.8     - Ensure access to /etc/gshadow- is configured     (Automated)
+#   7.1.9     - Ensure access to /etc/shells is configured       (Automated)
+#
+# Profile:    Level 1 & 2 - Server | Level 1 & 2 - Workstation
+# OS:         Ubuntu / Debian (apt-based)
+# Framework:  CIS Controls v8/v7 | NIST SP 800-53 Rev. 5
+#
+# Usage:
+#   ansible-playbook cis_hardening.yml -i inventory.ini
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags audit
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags remediate
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags tmp
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags gpg
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags packages
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags apparmor
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags bootloader
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags motd
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags issue
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags ufw
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags sshd
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags sudo
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags pam
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags password
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags accounts
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags logging
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags rsyslog
+#   ansible-playbook cis_hardening.yml -i inventory.ini --tags fileperms
+#   ansible-playbook cis_hardening.yml -i inventory.ini --check   # dry-run
+# =============================================================================
+
+- name: "CIS Ubuntu/Debian Hardening Playbook"
+  hosts: all
+  gather_facts: true
+  become: true
+
+  vars:
+    # ── /tmp mount options (1.1.2.1.2 / 1.1.2.1.3 / 1.1.2.1.4) ──────────────
+    required_mount_options:
+      - nodev
+      - nosuid
+      - noexec
+    fstab_backup: "/etc/fstab.bak_cis_{{ ansible_date_time.date }}"
+
+    # ── GPG key directories (1.2.1.1) ─────────────────────────────────────────
+    gpg_key_dirs:
+      - /etc/apt/trusted.gpg.d
+      - /etc/apt/sources.list.d
+
+    # ── AppArmor profile mode (1.3.1.3 / 1.3.1.4) ────────────────────────────
+    # Options: "enforce" | "complain"
+    apparmor_profile_mode: "enforce"
+
+    # ── Bootloader (1.4.1) ────────────────────────────────────────────────────
+    grub_cfg_path: "/boot/grub/grub.cfg"
+
+    # ── Global flag: set true to run audit only, skip all remediation ─────────
+    audit_only: false
+
+    # ── UFW SSH safety rule (4.1.2) ───────────────────────────────────────────
+    # ssh_allowed_from: restrict SSH to a specific IP or subnet, or use 'any'
+    # Examples:
+    #   ssh_allowed_from: "any"              # allow SSH from anywhere (least restrictive)
+    #   ssh_allowed_from: "192.168.1.0/24"  # allow only from this subnet
+    #   ssh_allowed_from: "10.0.0.5"        # allow only from this specific host
+    ssh_port: "22"
+    ssh_allowed_from: "any" # CHANGE THIS to restrict SSH access per site policy
+
+    # ── SSHD settings (5.1.x) ────────────────────────────────────────────────
+    sshd_config_path: "/etc/ssh/sshd_config"
+    sshd_config_d_path: "/etc/ssh/sshd_config.d"
+    sshd_banner_file: "/etc/issue.net"
+    # AllowUsers/AllowGroups: set at least one. Leave empty to skip (manual config).
+    # Example: sshd_allow_users: "admin deploy"
+    sshd_allow_users: ""
+    sshd_allow_groups: ""
+
+    # ── sudo settings (5.2.x) ────────────────────────────────────────────────
+    sudo_timestamp_timeout: 15 # minutes — site policy max is 15
+    su_restrict_group: "sugroup" # empty group used to restrict 'su' access
+
+    # ── PAM / password policy settings (5.3.x) ───────────────────────────────
+    pwquality_conf_d: "/etc/security/pwquality.conf.d"
+    faillock_conf: "/etc/security/faillock.conf"
+
+    # 5.3.3.1.1 — max failed attempts before lockout (site policy: <= 5)
+    faillock_deny: 5
+    # 5.3.3.1.2 — unlock time in seconds (0=never, or >= 900)
+    faillock_unlock_time: 900
+    # 5.3.3.2.1 — min characters changed from old password
+    pwquality_difok: 2
+    # 5.3.3.2.2 — minimum password length (>= 14)
+    pwquality_minlen: 14
+    # 5.3.3.2.3 — complexity: minclass or individual credits (manual review)
+    pwquality_minclass: 3
+    # 5.3.3.3.1 — number of previous passwords to remember (>= 24)
+    pwhistory_remember: 24
+
+    # ── journald settings (6.1.1.x) ──────────────────────────────────────────
+    journald_conf_d: "/etc/systemd/journald.conf.d"
+    journald_system_max_use: "1G"
+    journald_keep_free: "500M"
+    journald_runtime_max_use: "200M"
+    journald_runtime_keep_free: "50M"
+    journald_max_file_sec: "1month"
+
+    # ── Logging backend (6.1.x) ───────────────────────────────────────────────
+    # Choose your logging backend: "journald" or "rsyslog"
+    # journald  → 6.1.1.1.4 ForwardToSyslog=no  (controls 6.1.1.1.x apply)
+    # rsyslog   → 6.1.1.1.4 ForwardToSyslog=yes + rsyslog enabled (6.1.2.x apply)
+    logging_backend: "journald" # CHANGE to "rsyslog" if rsyslog is preferred
+
+  # ---------------------------------------------------------------------------
+  pre_tasks:
+    - name: "PRE | Verify OS is Debian/Ubuntu (apt-based)"
+      ansible.builtin.assert:
+        that: ansible_pkg_mgr == 'apt'
+        fail_msg: "This playbook requires an apt-based distribution (Ubuntu/Debian)."
+        success_msg: "OS check passed: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+      tags: [always]
+
+    - name: "PRE | Gather package facts"
+      ansible.builtin.package_facts:
+        manager: apt
+      tags: [always]
+
+  # ===========================================================================
+  tasks:
+    # =========================================================================
+    # SECTION 1.1 — /tmp Partition Mount Options
+    # =========================================================================
+
+    - name: "PRE | 1.1 | Verify /tmp is a separate partition or tmpfs"
+      ansible.builtin.command:
+        cmd: findmnt -kn /tmp
+      register: tmp_mount_check
+      changed_when: false
+      failed_when: false
+      tags: [always, tmp]
+
+    - name: "PRE | 1.1 | Display current /tmp mount"
+      ansible.builtin.debug:
+        msg: >-
+          {{ '/tmp is mounted: ' + tmp_mount_check.stdout
+             if tmp_mount_check.stdout
+             else 'WARNING — /tmp is not a separate partition. Controls 1.1.2.1.2-1.1.2.1.4 are not applicable.' }}
+      tags: [always, tmp]
+
+    # ── AUDIT 1.1 ─────────────────────────────────────────────────────────────
+
+    - name: "AUDIT | 1.1.2.1.2 | Check nodev on /tmp"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.1.2.1.2 (nodev) —
+          {% if tmp_mount_check.stdout == '' %}N/A: /tmp is not a separate partition
+          {% elif 'nodev' in tmp_mount_check.stdout %}PASS: nodev is set
+          {% else %}FAIL: nodev is NOT set{% endif %}
+      tags: [audit, tmp, cis_1.1.2.1.2]
+
+    - name: "AUDIT | 1.1.2.1.3 | Check nosuid on /tmp"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.1.2.1.3 (nosuid) —
+          {% if tmp_mount_check.stdout == '' %}N/A: /tmp is not a separate partition
+          {% elif 'nosuid' in tmp_mount_check.stdout %}PASS: nosuid is set
+          {% else %}FAIL: nosuid is NOT set{% endif %}
+      tags: [audit, tmp, cis_1.1.2.1.3]
+
+    - name: "AUDIT | 1.1.2.1.4 | Check noexec on /tmp"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.1.2.1.4 (noexec) —
+          {% if tmp_mount_check.stdout == '' %}N/A: /tmp is not a separate partition
+          {% elif 'noexec' in tmp_mount_check.stdout %}PASS: noexec is set
+          {% else %}FAIL: noexec is NOT set{% endif %}
+      tags: [audit, tmp, cis_1.1.2.1.4]
+
+    - name: "AUDIT | 1.1 | Set facts for missing /tmp options"
+      ansible.builtin.set_fact:
+        tmp_is_separate: "{{ tmp_mount_check.stdout != '' }}"
+        nodev_missing: "{{ 'nodev'  not in tmp_mount_check.stdout }}"
+        nosuid_missing: "{{ 'nosuid' not in tmp_mount_check.stdout }}"
+        noexec_missing: "{{ 'noexec' not in tmp_mount_check.stdout }}"
+      tags: [audit, remediate, tmp]
+
+    # ── REMEDIATE 1.1 ─────────────────────────────────────────────────────────
+
+    - name: "REMEDIATE | 1.1 | Backup /etc/fstab"
+      ansible.builtin.copy:
+        src: /etc/fstab
+        dest: "{{ fstab_backup }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0600"
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+        - nodev_missing | bool or nosuid_missing | bool or noexec_missing | bool
+      tags: [remediate, tmp]
+
+    - name: "REMEDIATE | 1.1.2.1.2 | Add nodev to /tmp in /etc/fstab"
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\S+\s+/tmp\s+\S+\s+)(?!(?:[^,\s]+,)*nodev(?:,[^,\s]+)*\s)(.*)'
+        replace: '\1nodev,\2'
+        backup: false
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+        - nodev_missing | bool
+      notify: Remount /tmp
+      tags: [remediate, tmp, cis_1.1.2.1.2]
+
+    - name: "REMEDIATE | 1.1.2.1.3 | Add nosuid to /tmp in /etc/fstab"
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\S+\s+/tmp\s+\S+\s+)(?!(?:[^,\s]+,)*nosuid(?:,[^,\s]+)*\s)(.*)'
+        replace: '\1nosuid,\2'
+        backup: false
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+        - nosuid_missing | bool
+      notify: Remount /tmp
+      tags: [remediate, tmp, cis_1.1.2.1.3]
+
+    - name: "REMEDIATE | 1.1.2.1.4 | Add noexec to /tmp in /etc/fstab"
+      ansible.builtin.replace:
+        path: /etc/fstab
+        regexp: '^(\S+\s+/tmp\s+\S+\s+)(?!(?:[^,\s]+,)*noexec(?:,[^,\s]+)*\s)(.*)'
+        replace: '\1noexec,\2'
+        backup: false
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+        - noexec_missing | bool
+      notify: Remount /tmp
+      tags: [remediate, tmp, cis_1.1.2.1.4]
+
+    # ── VERIFY 1.1 ────────────────────────────────────────────────────────────
+
+    - name: "VERIFY | 1.1 | Re-check /tmp mount options"
+      ansible.builtin.command:
+        cmd: findmnt -kn /tmp
+      register: tmp_post_check
+      changed_when: false
+      when: tmp_is_separate | bool
+      tags: [remediate, tmp]
+
+    - name: "VERIFY | 1.1.2.1.2 | Assert nodev active"
+      ansible.builtin.assert:
+        that: "'nodev' in tmp_post_check.stdout"
+        success_msg: "PASS — nodev is active on /tmp"
+        fail_msg: "FAIL — nodev is still missing from /tmp"
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+      tags: [remediate, tmp, cis_1.1.2.1.2]
+
+    - name: "VERIFY | 1.1.2.1.3 | Assert nosuid active"
+      ansible.builtin.assert:
+        that: "'nosuid' in tmp_post_check.stdout"
+        success_msg: "PASS — nosuid is active on /tmp"
+        fail_msg: "FAIL — nosuid is still missing from /tmp"
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+      tags: [remediate, tmp, cis_1.1.2.1.3]
+
+    - name: "VERIFY | 1.1.2.1.4 | Assert noexec active"
+      ansible.builtin.assert:
+        that: "'noexec' in tmp_post_check.stdout"
+        success_msg: "PASS — noexec is active on /tmp"
+        fail_msg: "FAIL — noexec is still missing from /tmp"
+      when:
+        - not audit_only
+        - tmp_is_separate | bool
+      tags: [remediate, tmp, cis_1.1.2.1.4]
+
+    # =========================================================================
+    # SECTION 1.2.1 — Package Manager: GPG Keys & Repositories  (MANUAL)
+    # =========================================================================
+
+    # ── AUDIT 1.2.1.1 — GPG Keys ──────────────────────────────────────────────
+
+    - name: "AUDIT | 1.2.1.1 | Find GPG keyring files (.gpg / .asc)"
+      ansible.builtin.find:
+        paths: "{{ gpg_key_dirs }}"
+        patterns: ["*.gpg", "*.asc"]
+        file_type: file
+      register: gpg_keyring_files
+      failed_when: false
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "AUDIT | 1.2.1.1 | Warn when no keyring files found"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.2.1.1 — WARNING: No GPG keyring files found in
+          {{ gpg_key_dirs | join(', ') }}.
+          Verify keys are configured via another method (Signed-By / apt-key).
+      when: gpg_keyring_files.files | length == 0
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "AUDIT | 1.2.1.1 | Extract key IDs from keyring files"
+      ansible.builtin.shell: |
+        gpg --list-packets "{{ item.path }}" 2>/dev/null \
+          | awk '/keyid/ && !seen[$NF]++ {print "keyid:", $NF}'
+      loop: "{{ gpg_keyring_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      register: gpg_keyids
+      changed_when: false
+      when: gpg_keyring_files.files | length > 0
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "AUDIT | 1.2.1.1 | Extract Signed-By values from keyring files"
+      ansible.builtin.shell: |
+        gpg --list-packets "{{ item.path }}" 2>/dev/null \
+          | awk '/Signed-By:/ {print "signed-by:", $NF}'
+      loop: "{{ gpg_keyring_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      register: gpg_signedby
+      changed_when: false
+      when: gpg_keyring_files.files | length > 0
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "AUDIT | 1.2.1.1 | Display GPG key report per file"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 1.2.1.1 GPG KEY REPORT ───────────────────────────────────
+          File      : {{ item.item.path }}
+          Key IDs   : {{ item.stdout | default('(none found)') }}
+          Signed-By : {{ gpg_signedby.results[idx].stdout | default('(none found)') }}
+          ACTION    : Review against site policy.
+          ─────────────────────────────────────────────────────────────────
+      loop: "{{ gpg_keyids.results }}"
+      loop_control:
+        index_var: idx
+        label: "{{ item.item.path }}"
+      when: gpg_keyring_files.files | length > 0
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "AUDIT | 1.2.1.1 | List legacy apt-key trusted keys (deprecated)"
+      ansible.builtin.command:
+        cmd: apt-key list
+      register: apt_key_output
+      changed_when: false
+      failed_when: false
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "AUDIT | 1.2.1.1 | Display legacy apt-key output"
+      ansible.builtin.debug:
+        msg: |
+          ── apt-key list (DEPRECATED — migrate to trusted.gpg.d) ─────────
+          {{ apt_key_output.stdout | default('(no output)') }}
+          NOTE: Use Signed-By in sources.list per apt-secure(8).
+          ─────────────────────────────────────────────────────────────────
+      tags: [audit, gpg, cis_1.2.1.1]
+
+    - name: "REMEDIATE | 1.2.1.1 | GPG keys — manual action required"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  CIS 1.2.1.1 — MANUAL ACTION REQUIRED                          ║
+          ║  Review GPG key report above against your site policy.          ║
+          ║  • Place keyrings in /etc/apt/trusted.gpg.d/                   ║
+          ║  • Use Signed-By in /etc/apt/sources.list.d/<repo>.list        ║
+          ║  • Remove untrusted/legacy keys from trusted.gpg.d             ║
+          ║  Reference: NIST SP 800-53 SI-2 | CIS v8 7.3, 7.4             ║
+          ╚══════════════════════════════════════════════════════════════════╝
+      tags: [remediate, gpg, cis_1.2.1.1]
+
+    # ── AUDIT 1.2.1.2 — Package Manager Repositories ─────────────────────────
+
+    - name: "AUDIT | 1.2.1.2 | Check configured apt repositories"
+      ansible.builtin.command:
+        cmd: apt-cache policy
+      register: apt_cache_policy
+      changed_when: false
+      tags: [audit, packages, cis_1.2.1.2]
+
+    - name: "AUDIT | 1.2.1.2 | Display repository policy"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 1.2.1.2 PACKAGE REPOSITORY REPORT ────────────────────────
+          {{ apt_cache_policy.stdout }}
+          ACTION REQUIRED: Verify all repositories above are approved by
+          site policy. Remove any unknown or rogue repository entries.
+          ─────────────────────────────────────────────────────────────────
+      tags: [audit, packages, cis_1.2.1.2]
+
+    - name: "REMEDIATE | 1.2.1.2 | Repositories — manual action required"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  CIS 1.2.1.2 — MANUAL ACTION REQUIRED                          ║
+          ║  Configure package repositories per site policy:               ║
+          ║  • Edit /etc/apt/sources.list                                  ║
+          ║  • Manage repo files in /etc/apt/sources.list.d/              ║
+          ║  • Remove any rogue or unapproved repositories                 ║
+          ║  Reference: NIST SP 800-53 SI-2 | CIS v8 7.3, 7.4             ║
+          ╚══════════════════════════════════════════════════════════════════╝
+      tags: [remediate, packages, cis_1.2.1.2]
+
+    # =========================================================================
+    # SECTION 1.2.2 — System Updates & Patches  (MANUAL)
+    # =========================================================================
+
+    - name: "AUDIT | 1.2.2.1 | Update apt cache"
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 0
+      tags: [audit, packages, cis_1.2.2.1]
+
+    - name: "AUDIT | 1.2.2.1 | Simulate upgrade to check pending updates"
+      ansible.builtin.command:
+        cmd: apt -s upgrade
+      register: apt_simulate_upgrade
+      changed_when: false
+      tags: [audit, packages, cis_1.2.2.1]
+
+    - name: "AUDIT | 1.2.2.1 | Report pending updates"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 1.2.2.1 PENDING UPDATES REPORT ───────────────────────────
+          {{ apt_simulate_upgrade.stdout }}
+          ─────────────────────────────────────────────────────────────────
+          {% if '0 upgraded, 0 newly installed' in apt_simulate_upgrade.stdout %}
+          PASS — System is up to date. No pending updates found.
+          {% else %}
+          FAIL — Pending updates detected. Remediation required.
+          {% endif %}
+      tags: [audit, packages, cis_1.2.2.1]
+
+    - name: "REMEDIATE | 1.2.2.1 | Apply available updates (apt upgrade)"
+      ansible.builtin.apt:
+        upgrade: safe
+        update_cache: false
+      when:
+        - not audit_only
+        - "'0 upgraded, 0 newly installed' not in apt_simulate_upgrade.stdout"
+      tags: [remediate, packages, cis_1.2.2.1]
+
+    - name: "REMEDIATE | 1.2.2.1 | Post-upgrade summary"
+      ansible.builtin.debug:
+        msg: |
+          CIS 1.2.2.1 — System packages upgraded (apt upgrade).
+          NOTE: Review site policy to determine if apt dist-upgrade is
+          required. dist-upgrade may remove packages to resolve conflicts.
+          Run manually: apt dist-upgrade
+      when:
+        - not audit_only
+        - "'0 upgraded, 0 newly installed' not in apt_simulate_upgrade.stdout"
+      tags: [remediate, packages, cis_1.2.2.1]
+
+    # =========================================================================
+    # SECTION 1.3.1 — AppArmor
+    # =========================================================================
+
+    # ── AUDIT & REMEDIATE 1.3.1.1 — Install AppArmor ─────────────────────────
+
+    - name: "AUDIT | 1.3.1.1 | Check apparmor package is installed"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.3.1.1 (apparmor) —
+          {% if 'apparmor' in ansible_facts.packages %}PASS: apparmor is installed
+          {% else %}FAIL: apparmor is NOT installed{% endif %}
+      tags: [audit, apparmor, cis_1.3.1.1]
+
+    - name: "AUDIT | 1.3.1.1 | Check apparmor-utils package is installed"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.3.1.1 (apparmor-utils) —
+          {% if 'apparmor-utils' in ansible_facts.packages %}PASS: apparmor-utils is installed
+          {% else %}FAIL: apparmor-utils is NOT installed{% endif %}
+      tags: [audit, apparmor, cis_1.3.1.1]
+
+    - name: "REMEDIATE | 1.3.1.1 | Install apparmor and apparmor-utils"
+      ansible.builtin.apt:
+        name:
+          - apparmor
+          - apparmor-utils
+        state: present
+        update_cache: false
+      when: >
+        not audit_only and
+        ('apparmor' not in ansible_facts.packages or
+         'apparmor-utils' not in ansible_facts.packages)
+      tags: [remediate, apparmor, cis_1.3.1.1]
+
+    # ── AUDIT & REMEDIATE 1.3.1.2 — AppArmor enabled in GRUB ────────────────
+
+    - name: "AUDIT | 1.3.1.2 | Check AppArmor is not disabled in GRUB"
+      ansible.builtin.shell: |
+        grep "^\s*linux" /boot/grub/grub.cfg | grep "apparmor=0" || true
+      register: apparmor_grub_check
+      changed_when: false
+      tags: [audit, apparmor, cis_1.3.1.2]
+
+    - name: "AUDIT | 1.3.1.2 | Report AppArmor GRUB status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.3.1.2 (AppArmor in GRUB) —
+          {% if apparmor_grub_check.stdout == '' %}PASS: apparmor=0 not found in grub.cfg
+          {% else %}FAIL: apparmor=0 is set in grub.cfg — AppArmor is disabled at boot!{% endif %}
+      tags: [audit, apparmor, cis_1.3.1.2]
+
+    - name: "REMEDIATE | 1.3.1.2 | Remove apparmor=0 from /etc/default/grub"
+      ansible.builtin.replace:
+        path: /etc/default/grub
+        regexp: '\bapparmor=0\b'
+        replace: ""
+      when:
+        - not audit_only
+        - apparmor_grub_check.stdout != ''
+      notify: Update GRUB
+      tags: [remediate, apparmor, cis_1.3.1.2]
+
+    # ── AUDIT & REMEDIATE 1.3.1.3 — No disabled profiles ────────────────────
+
+    - name: "AUDIT | 1.3.1.3 | Get AppArmor profile status"
+      ansible.builtin.command:
+        cmd: apparmor_status
+      register: apparmor_status_out
+      changed_when: false
+      failed_when: false
+      tags: [audit, apparmor, cis_1.3.1.3, cis_1.3.1.4]
+
+    - name: "AUDIT | 1.3.1.3 | Check for unconfined processes"
+      ansible.builtin.shell: |
+        apparmor_status 2>/dev/null | grep "processes are unconfined" || echo "0 processes are unconfined"
+      register: unconfined_check
+      changed_when: false
+      tags: [audit, apparmor, cis_1.3.1.3]
+
+    - name: "AUDIT | 1.3.1.3 | Report AppArmor profile summary"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 1.3.1.3 APPARMOR PROFILE STATUS ──────────────────────────
+          {{ apparmor_status_out.stdout | default('apparmor_status not available') }}
+          ─────────────────────────────────────────────────────────────────
+          {% set unconfined_count = unconfined_check.stdout | regex_search('^(\d+)', '\\1') %}
+          {% if unconfined_count and unconfined_count[0] != '0' %}
+          FAIL: Unconfined processes detected — action required.
+          {% else %}
+          PASS: No unconfined processes found.
+          {% endif %}
+      tags: [audit, apparmor, cis_1.3.1.3]
+
+    - name: "REMEDIATE | 1.3.1.3 | Set all AppArmor profiles to {{ apparmor_profile_mode }} mode"
+      ansible.builtin.command:
+        cmd: "aa-{{ apparmor_profile_mode }} /etc/apparmor.d/*"
+      when:
+        - not audit_only
+        - apparmor_status_out.rc == 0
+      changed_when: true
+      tags: [remediate, apparmor, cis_1.3.1.3]
+
+    # ── AUDIT & REMEDIATE 1.3.1.4 — All profiles enforcing ──────────────────
+
+    - name: "AUDIT | 1.3.1.4 | Check for profiles in complain mode"
+      ansible.builtin.shell: |
+        apparmor_status 2>/dev/null | grep "profiles are in complain mode" \
+          | awk '{print $1}' || echo "0"
+      register: complain_count
+      changed_when: false
+      tags: [audit, apparmor, cis_1.3.1.4]
+
+    - name: "AUDIT | 1.3.1.4 | Report enforce-mode compliance"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.3.1.4 (all profiles enforcing) —
+          {% if complain_count.stdout | trim == '0' %}PASS: No profiles in complain mode
+          {% else %}FAIL: {{ complain_count.stdout | trim }} profile(s) in complain mode{% endif %}
+      tags: [audit, apparmor, cis_1.3.1.4]
+
+    - name: "REMEDIATE | 1.3.1.4 | Enforce all AppArmor profiles"
+      ansible.builtin.command:
+        cmd: aa-enforce /etc/apparmor.d/*
+      when:
+        - not audit_only
+        - complain_count.stdout | trim != '0'
+        - apparmor_status_out.rc == 0
+      changed_when: true
+      tags: [remediate, apparmor, cis_1.3.1.4]
+
+    # =========================================================================
+    # SECTION 1.4 — Bootloader
+    # =========================================================================
+
+    # ── AUDIT 1.4.1 — Bootloader Password ────────────────────────────────────
+
+    - name: "AUDIT | 1.4.1 | Check superusers set in grub.cfg"
+      ansible.builtin.command:
+        cmd: "grep '^set superusers' {{ grub_cfg_path }}"
+      register: grub_superusers
+      changed_when: false
+      failed_when: false
+      tags: [audit, bootloader, cis_1.4.1]
+
+    - name: "AUDIT | 1.4.1 | Check password_pbkdf2 set in grub.cfg"
+      ansible.builtin.shell: |
+        awk -F. '/^\s*password/ {print $1"."$2"."$3}' {{ grub_cfg_path }}
+      register: grub_password
+      changed_when: false
+      failed_when: false
+      tags: [audit, bootloader, cis_1.4.1]
+
+    - name: "AUDIT | 1.4.1 | Report bootloader password status"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 1.4.1 BOOTLOADER PASSWORD STATUS ─────────────────────────
+          superusers : {{ grub_superusers.stdout | default('(not set)') }}
+          password   : {{ grub_password.stdout  | default('(not set)') }}
+          {% if grub_superusers.stdout != '' and grub_password.stdout != '' %}
+          PASS: Bootloader password appears to be configured.
+          {% else %}
+          FAIL: Bootloader password is NOT configured.
+          {% endif %}
+          ─────────────────────────────────────────────────────────────────
+      tags: [audit, bootloader, cis_1.4.1]
+
+    - name: "REMEDIATE | 1.4.1 | Bootloader password — manual action required"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  CIS 1.4.1 — MANUAL ACTION REQUIRED                            ║
+          ║  1. Generate an encrypted password:                            ║
+          ║     grub-mkpasswd-pbkdf2 --iteration-count=600000 --salt=64   ║
+          ║  2. Add to a custom file in /etc/grub.d/ (NOT 00_header):     ║
+          ║     set superusers="<username>"                                ║
+          ║     password_pbkdf2 <username> <encrypted-password>           ║
+          ║  3. Optional (allow boot without password):                    ║
+          ║     Add --unrestricted to CLASS= in /etc/grub.d/10_linux      ║
+          ║  4. Apply: update-grub                                         ║
+          ║  Reference: NIST SP 800-53 AC-3                               ║
+          ╚══════════════════════════════════════════════════════════════════╝
+      when: grub_superusers.stdout == '' or grub_password.stdout == ''
+      tags: [remediate, bootloader, cis_1.4.1]
+
+    # ── AUDIT & REMEDIATE 1.4.2 — Bootloader File Permissions ───────────────
+
+    - name: "AUDIT | 1.4.2 | Check grub.cfg permissions"
+      ansible.builtin.stat:
+        path: "{{ grub_cfg_path }}"
+      register: grub_cfg_stat
+      tags: [audit, bootloader, cis_1.4.2]
+
+    - name: "AUDIT | 1.4.2 | Report grub.cfg permission status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.4.2 (grub.cfg permissions) —
+          {% if grub_cfg_stat.stat.exists %}
+            Mode={{ grub_cfg_stat.stat.mode }} Owner={{ grub_cfg_stat.stat.pw_name }} Group={{ grub_cfg_stat.stat.gr_name }} —
+            {% if grub_cfg_stat.stat.mode == '0600' and grub_cfg_stat.stat.pw_name == 'root' and grub_cfg_stat.stat.gr_name == 'root' %}
+            PASS: Permissions and ownership are correct (0600 root:root)
+            {% else %}
+            FAIL: Expected 0600 root:root, got {{ grub_cfg_stat.stat.mode }} {{ grub_cfg_stat.stat.pw_name }}:{{ grub_cfg_stat.stat.gr_name }}
+            {% endif %}
+          {% else %}
+            N/A: {{ grub_cfg_path }} does not exist on this host
+          {% endif %}
+      tags: [audit, bootloader, cis_1.4.2]
+
+    - name: "REMEDIATE | 1.4.2 | Set grub.cfg owner to root:root"
+      ansible.builtin.file:
+        path: "{{ grub_cfg_path }}"
+        owner: root
+        group: root
+      when:
+        - not audit_only
+        - grub_cfg_stat.stat.exists
+        - grub_cfg_stat.stat.pw_name != 'root' or grub_cfg_stat.stat.gr_name != 'root'
+      tags: [remediate, bootloader, cis_1.4.2]
+
+    - name: "REMEDIATE | 1.4.2 | Set grub.cfg permissions to 0600"
+      ansible.builtin.file:
+        path: "{{ grub_cfg_path }}"
+        mode: "0600"
+      when:
+        - not audit_only
+        - grub_cfg_stat.stat.exists
+        - grub_cfg_stat.stat.mode != '0600'
+      tags: [remediate, bootloader, cis_1.4.2]
+
+    # =========================================================================
+    # SECTION 1.6.4 — /etc/motd Access
+    # =========================================================================
+
+    - name: "AUDIT | 1.6.4 | Check /etc/motd existence and permissions"
+      ansible.builtin.stat:
+        path: /etc/motd
+        follow: true
+      register: motd_stat
+      tags: [audit, motd, cis_1.6.4]
+
+    - name: "AUDIT | 1.6.4 | Report /etc/motd status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.6.4 (/etc/motd) —
+          {% if not motd_stat.stat.exists %}
+          PASS: /etc/motd does not exist (acceptable state)
+          {% elif motd_stat.stat.mode == '0644' and motd_stat.stat.pw_name == 'root' and motd_stat.stat.gr_name == 'root' %}
+          PASS: Mode={{ motd_stat.stat.mode }} Owner=root:root — correct
+          {% else %}
+          FAIL: Mode={{ motd_stat.stat.mode }} Owner={{ motd_stat.stat.pw_name }}:{{ motd_stat.stat.gr_name }}
+          — Expected 0644 root:root
+          {% endif %}
+      tags: [audit, motd, cis_1.6.4]
+
+    - name: "REMEDIATE | 1.6.4 | Set /etc/motd owner to root:root"
+      ansible.builtin.file:
+        path: /etc/motd
+        owner: root
+        group: root
+        follow: true
+      when:
+        - not audit_only
+        - motd_stat.stat.exists
+        - motd_stat.stat.pw_name != 'root' or motd_stat.stat.gr_name != 'root'
+      tags: [remediate, motd, cis_1.6.4]
+
+    - name: "REMEDIATE | 1.6.4 | Set /etc/motd permissions to 0644"
+      ansible.builtin.file:
+        path: /etc/motd
+        mode: "0644"
+        follow: true
+      when:
+        - not audit_only
+        - motd_stat.stat.exists
+        - motd_stat.stat.mode not in ['0644', '0640', '0600']
+      tags: [remediate, motd, cis_1.6.4]
+
+    - name: "VERIFY | 1.6.4 | Confirm /etc/motd final state"
+      ansible.builtin.stat:
+        path: /etc/motd
+        follow: true
+      register: motd_post_stat
+      when: motd_stat.stat.exists
+      tags: [remediate, motd, cis_1.6.4]
+
+    - name: "VERIFY | 1.6.4 | Assert /etc/motd permissions correct"
+      ansible.builtin.assert:
+        that:
+          - motd_post_stat.stat.pw_name == 'root'
+          - motd_post_stat.stat.gr_name == 'root'
+          - motd_post_stat.stat.mode in ['0644', '0640', '0600']
+        success_msg: "PASS — /etc/motd permissions are correctly set"
+        fail_msg: "FAIL — /etc/motd permissions still incorrect after remediation"
+      when:
+        - not audit_only
+        - motd_stat.stat.exists
+      tags: [remediate, motd, cis_1.6.4]
+
+    # =========================================================================
+    # SECTION 1.6.5 — /etc/issue Access
+    # =========================================================================
+
+    - name: "AUDIT | 1.6.5 | Check /etc/issue permissions"
+      ansible.builtin.stat:
+        path: /etc/issue
+        follow: true
+      register: issue_stat
+      tags: [audit, issue, cis_1.6.5]
+
+    - name: "AUDIT | 1.6.5 | Report /etc/issue status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.6.5 (/etc/issue) —
+          {% if not issue_stat.stat.exists %}
+          FAIL: /etc/issue does not exist.
+          {% elif issue_stat.stat.mode in ['0644','0640','0600'] and issue_stat.stat.pw_name == 'root' and issue_stat.stat.gr_name == 'root' %}
+          PASS: Mode={{ issue_stat.stat.mode }} Owner=root:root — correct
+          {% else %}
+          FAIL: Mode={{ issue_stat.stat.mode }} Owner={{ issue_stat.stat.pw_name }}:{{ issue_stat.stat.gr_name }}
+          — Expected 0644 root:root
+          {% endif %}
+      tags: [audit, issue, cis_1.6.5]
+
+    - name: "REMEDIATE | 1.6.5 | Set /etc/issue owner to root:root"
+      ansible.builtin.file:
+        path: /etc/issue
+        owner: root
+        group: root
+        follow: true
+      when:
+        - not audit_only
+        - issue_stat.stat.exists
+        - issue_stat.stat.pw_name != 'root' or issue_stat.stat.gr_name != 'root'
+      tags: [remediate, issue, cis_1.6.5]
+
+    - name: "REMEDIATE | 1.6.5 | Set /etc/issue permissions to 0644"
+      ansible.builtin.file:
+        path: /etc/issue
+        mode: "0644"
+        follow: true
+      when:
+        - not audit_only
+        - issue_stat.stat.exists
+        - issue_stat.stat.mode not in ['0644', '0640', '0600']
+      tags: [remediate, issue, cis_1.6.5]
+
+    - name: "VERIFY | 1.6.5 | Assert /etc/issue permissions correct"
+      ansible.builtin.stat:
+        path: /etc/issue
+        follow: true
+      register: issue_post_stat
+      when:
+        - not audit_only
+        - issue_stat.stat.exists
+      tags: [remediate, issue, cis_1.6.5]
+
+    - name: "VERIFY | 1.6.5 | Assert result"
+      ansible.builtin.assert:
+        that:
+          - issue_post_stat.stat.pw_name == 'root'
+          - issue_post_stat.stat.gr_name == 'root'
+          - issue_post_stat.stat.mode in ['0644', '0640', '0600']
+        success_msg: "PASS — /etc/issue permissions are correctly set"
+        fail_msg: "FAIL — /etc/issue permissions still incorrect after remediation"
+      when:
+        - not audit_only
+        - issue_stat.stat.exists
+      tags: [remediate, issue, cis_1.6.5]
+
+    # =========================================================================
+    # SECTION 1.6.6 — /etc/issue.net Access
+    # =========================================================================
+
+    - name: "AUDIT | 1.6.6 | Check /etc/issue.net permissions"
+      ansible.builtin.stat:
+        path: /etc/issue.net
+        follow: true
+      register: issue_net_stat
+      tags: [audit, issue, cis_1.6.6]
+
+    - name: "AUDIT | 1.6.6 | Report /etc/issue.net status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 1.6.6 (/etc/issue.net) —
+          {% if not issue_net_stat.stat.exists %}
+          FAIL: /etc/issue.net does not exist.
+          {% elif issue_net_stat.stat.mode in ['0644','0640','0600'] and issue_net_stat.stat.pw_name == 'root' and issue_net_stat.stat.gr_name == 'root' %}
+          PASS: Mode={{ issue_net_stat.stat.mode }} Owner=root:root — correct
+          {% else %}
+          FAIL: Mode={{ issue_net_stat.stat.mode }} Owner={{ issue_net_stat.stat.pw_name }}:{{ issue_net_stat.stat.gr_name }}
+          — Expected 0644 root:root
+          {% endif %}
+      tags: [audit, issue, cis_1.6.6]
+
+    - name: "REMEDIATE | 1.6.6 | Set /etc/issue.net owner to root:root"
+      ansible.builtin.file:
+        path: /etc/issue.net
+        owner: root
+        group: root
+        follow: true
+      when:
+        - not audit_only
+        - issue_net_stat.stat.exists
+        - issue_net_stat.stat.pw_name != 'root' or issue_net_stat.stat.gr_name != 'root'
+      tags: [remediate, issue, cis_1.6.6]
+
+    - name: "REMEDIATE | 1.6.6 | Set /etc/issue.net permissions to 0644"
+      ansible.builtin.file:
+        path: /etc/issue.net
+        mode: "0644"
+        follow: true
+      when:
+        - not audit_only
+        - issue_net_stat.stat.exists
+        - issue_net_stat.stat.mode not in ['0644', '0640', '0600']
+      tags: [remediate, issue, cis_1.6.6]
+
+    - name: "VERIFY | 1.6.6 | Re-check /etc/issue.net permissions"
+      ansible.builtin.stat:
+        path: /etc/issue.net
+        follow: true
+      register: issue_net_post_stat
+      when:
+        - not audit_only
+        - issue_net_stat.stat.exists
+      tags: [remediate, issue, cis_1.6.6]
+
+    - name: "VERIFY | 1.6.6 | Assert result"
+      ansible.builtin.assert:
+        that:
+          - issue_net_post_stat.stat.pw_name == 'root'
+          - issue_net_post_stat.stat.gr_name == 'root'
+          - issue_net_post_stat.stat.mode in ['0644', '0640', '0600']
+        success_msg: "PASS — /etc/issue.net permissions are correctly set"
+        fail_msg: "FAIL — /etc/issue.net permissions still incorrect after remediation"
+      when:
+        - not audit_only
+        - issue_net_stat.stat.exists
+      tags: [remediate, issue, cis_1.6.6]
+
+    # =========================================================================
+    # SECTION 4.1 — UFW Firewall
+    # =========================================================================
+
+    # ── AUDIT & REMEDIATE 4.1.1 — UFW Installed ───────────────────────────────
+
+    - name: "AUDIT | 4.1.1 | Check ufw package is installed"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 4.1.1 (ufw installed) —
+          {% if 'ufw' in ansible_facts.packages %}PASS: ufw is installed (version {{ ansible_facts.packages['ufw'][0].version }})
+          {% else %}FAIL: ufw is NOT installed{% endif %}
+      tags: [audit, ufw, cis_4.1.1]
+
+    - name: "REMEDIATE | 4.1.1 | Install ufw"
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+        update_cache: false
+      when:
+        - not audit_only
+        - "'ufw' not in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.1]
+
+    - name: "REMEDIATE | 4.1.1 | Refresh package facts after ufw install"
+      ansible.builtin.package_facts:
+        manager: apt
+      when:
+        - not audit_only
+        - "'ufw' not in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.1]
+
+    # ── AUDIT & REMEDIATE 4.1.2 — UFW Service Active ──────────────────────────
+
+    - name: "AUDIT | 4.1.2 | Check ufw.service enabled state"
+      ansible.builtin.command:
+        cmd: systemctl is-enabled ufw.service
+      register: ufw_enabled
+      changed_when: false
+      failed_when: false
+      tags: [audit, ufw, cis_4.1.2]
+
+    - name: "AUDIT | 4.1.2 | Check ufw.service active state"
+      ansible.builtin.command:
+        cmd: systemctl is-active ufw.service
+      register: ufw_active
+      changed_when: false
+      failed_when: false
+      tags: [audit, ufw, cis_4.1.2]
+
+    - name: "AUDIT | 4.1.2 | Check ufw firewall status"
+      ansible.builtin.command:
+        cmd: ufw status
+      register: ufw_status
+      changed_when: false
+      failed_when: false
+      tags: [audit, ufw, cis_4.1.2]
+
+    - name: "AUDIT | 4.1.2 | Report ufw service status"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 4.1.2 UFW SERVICE STATUS ─────────────────────────────────
+          ufw.service enabled : {{ ufw_enabled.stdout | default('unknown') }}
+          ufw.service active  : {{ ufw_active.stdout  | default('unknown') }}
+          ufw status          : {{ ufw_status.stdout  | default('unknown') }}
+          ─────────────────────────────────────────────────────────────────
+          {% if ufw_enabled.stdout == 'enabled' and ufw_active.stdout == 'active' and 'Status: active' in ufw_status.stdout %}
+          PASS: ufw is enabled, active, and running.
+          {% else %}
+          FAIL: ufw is not fully configured — remediation required.
+          {% endif %}
+      tags: [audit, ufw, cis_4.1.2]
+
+    - name: "REMEDIATE | 4.1.2 | Unmask ufw.service"
+      ansible.builtin.systemd:
+        name: ufw.service
+        masked: false
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "REMEDIATE | 4.1.2 | Enable and start ufw.service"
+      ansible.builtin.systemd:
+        name: ufw.service
+        enabled: true
+        state: started
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - ufw_enabled.stdout != 'enabled' or ufw_active.stdout != 'active'
+      tags: [remediate, ufw, cis_4.1.2]
+
+    # ── SSH SAFETY RULE — must be added BEFORE ufw --force enable ─────────────
+    # This prevents losing SSH access when the firewall is activated.
+    # Controlled by vars: ssh_allowed_from and ssh_port
+
+    - name: "REMEDIATE | 4.1.2 | Check if SSH allow rule already exists"
+      ansible.builtin.shell: |
+        ufw status numbered 2>/dev/null | grep -E "{{ ssh_port }}/tcp|{{ ssh_port }} " || true
+      register: ufw_ssh_rule_check
+      changed_when: false
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "REMEDIATE | 4.1.2 | Add SSH allow rule before enabling firewall"
+      ansible.builtin.command:
+        cmd: >
+          ufw allow proto tcp
+          from {{ ssh_allowed_from }}
+          to any port {{ ssh_port }}
+          comment 'CIS 4.1.2 - SSH access rule'
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - ufw_ssh_rule_check.stdout == ''
+      changed_when: true
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "REMEDIATE | 4.1.2 | Confirm SSH rule was added"
+      ansible.builtin.shell: |
+        ufw status numbered 2>/dev/null | grep -E "{{ ssh_port }}/tcp|{{ ssh_port }} "
+      register: ufw_ssh_rule_confirm
+      changed_when: false
+      failed_when: ufw_ssh_rule_confirm.stdout == ''
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "REMEDIATE | 4.1.2 | Show active SSH rule"
+      ansible.builtin.debug:
+        msg: |
+          ── UFW SSH SAFETY RULE ───────────────────────────────────────────
+          SSH rule confirmed before enabling firewall:
+          {{ ufw_ssh_rule_confirm.stdout }}
+          Source : {{ ssh_allowed_from }}
+          Port   : {{ ssh_port }}/tcp
+          ─────────────────────────────────────────────────────────────────
+          ⚠ To restrict SSH further, update var 'ssh_allowed_from' in vars
+          and re-run with --tags ufw
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "REMEDIATE | 4.1.2 | Enable ufw firewall (ufw --force enable)"
+      ansible.builtin.command:
+        cmd: ufw --force enable
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - "'Status: active' not in ufw_status.stdout"
+      changed_when: true
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "VERIFY | 4.1.2 | Re-check ufw status after remediation"
+      ansible.builtin.command:
+        cmd: ufw status
+      register: ufw_post_status
+      changed_when: false
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.2]
+
+    - name: "VERIFY | 4.1.2 | Assert ufw is active"
+      ansible.builtin.assert:
+        that: "'Status: active' in ufw_post_status.stdout"
+        success_msg: "PASS — ufw is active and running"
+        fail_msg: "FAIL — ufw is still not active after remediation"
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+      tags: [remediate, ufw, cis_4.1.2]
+
+    # =========================================================================
+    # SECTION 4.1.3-4.1.5 — UFW Default Policies
+    # =========================================================================
+
+    - name: "AUDIT | 4.1.3/4.1.4/4.1.5 | Get ufw verbose status"
+      ansible.builtin.command:
+        cmd: ufw status verbose
+      register: ufw_verbose
+      changed_when: false
+      failed_when: false
+      tags: [audit, ufw, cis_4.1.3, cis_4.1.4, cis_4.1.5]
+
+    - name: "AUDIT | 4.1.3 | Report incoming default policy"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 4.1.3 (incoming default) —
+          {% if 'deny (incoming)' in ufw_verbose.stdout or 'reject (incoming)' in ufw_verbose.stdout %}
+          PASS: Default incoming is deny/reject
+          {% else %}FAIL: Default incoming is NOT deny/reject — remediation required{% endif %}
+      tags: [audit, ufw, cis_4.1.3]
+
+    - name: "AUDIT | 4.1.4 | Report outgoing default policy"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 4.1.4 (outgoing default) —
+          {% if 'deny (outgoing)' in ufw_verbose.stdout or 'reject (outgoing)' in ufw_verbose.stdout %}
+          PASS: Default outgoing is deny/reject
+          {% else %}FAIL: Default outgoing is NOT deny/reject — remediation required{% endif %}
+      tags: [audit, ufw, cis_4.1.4]
+
+    - name: "AUDIT | 4.1.5 | Report routed default policy"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 4.1.5 (routed default) —
+          {% if 'disabled (routed)' in ufw_verbose.stdout or 'deny (routed)' in ufw_verbose.stdout %}
+          PASS: Default routed is disabled/deny
+          {% else %}FAIL: Default routed is NOT disabled/deny — remediation required{% endif %}
+      tags: [audit, ufw, cis_4.1.5]
+
+    - name: "REMEDIATE | 4.1.3 | Set ufw default incoming to deny"
+      ansible.builtin.command:
+        cmd: ufw default deny incoming
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - "'deny (incoming)' not in ufw_verbose.stdout"
+        - "'reject (incoming)' not in ufw_verbose.stdout"
+      changed_when: true
+      tags: [remediate, ufw, cis_4.1.3]
+
+    - name: "REMEDIATE | 4.1.4 | Set ufw default outgoing to deny"
+      ansible.builtin.command:
+        cmd: ufw default deny outgoing
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - "'deny (outgoing)' not in ufw_verbose.stdout"
+        - "'reject (outgoing)' not in ufw_verbose.stdout"
+      changed_when: true
+      tags: [remediate, ufw, cis_4.1.4]
+
+    - name: "REMEDIATE | 4.1.4 | Add essential outgoing allow rules after deny outgoing"
+      ansible.builtin.command:
+        cmd: "ufw allow out {{ item.port }} proto {{ item.proto }} comment '{{ item.comment }}'"
+      loop:
+        - { port: "80", proto: "tcp", comment: "HTTP outbound" }
+        - { port: "443", proto: "tcp", comment: "HTTPS outbound" }
+        - { port: "53", proto: "udp", comment: "DNS outbound" }
+        - { port: "123", proto: "udp", comment: "NTP outbound" }
+        - { port: "853", proto: "tcp", comment: "DNS over TLS outbound" }
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - "'deny (outgoing)' not in ufw_verbose.stdout"
+        - "'reject (outgoing)' not in ufw_verbose.stdout"
+      changed_when: true
+      tags: [remediate, ufw, cis_4.1.4]
+
+    - name: "REMEDIATE | 4.1.5 | Set ufw default routed to deny"
+      ansible.builtin.command:
+        cmd: ufw default deny routed
+      when:
+        - not audit_only
+        - "'ufw' in ansible_facts.packages"
+        - "'disabled (routed)' not in ufw_verbose.stdout"
+        - "'deny (routed)' not in ufw_verbose.stdout"
+      changed_when: true
+      tags: [remediate, ufw, cis_4.1.5]
+
+    # =========================================================================
+    # SECTION 5.1 — SSH Server (sshd) Hardening
+    # =========================================================================
+
+    # ── 5.1.1 — sshd_config file permissions ─────────────────────────────────
+
+    - name: "AUDIT | 5.1.1 | Find sshd_config and drop-in .conf files"
+      ansible.builtin.find:
+        paths: "{{ sshd_config_d_path }}"
+        patterns: "*.conf"
+        file_type: file
+      register: sshd_conf_d_files
+      failed_when: false
+      tags: [audit, sshd, cis_5.1.1]
+
+    - name: "AUDIT | 5.1.1 | Check permissions on sshd_config"
+      ansible.builtin.stat:
+        path: "{{ sshd_config_path }}"
+        follow: true
+      register: sshd_config_stat
+      tags: [audit, sshd, cis_5.1.1]
+
+    - name: "AUDIT | 5.1.1 | Report sshd_config permission status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.1.1 ({{ sshd_config_path }}) —
+          {% if sshd_config_stat.stat.mode in ['0600','0400'] and sshd_config_stat.stat.pw_name == 'root' and sshd_config_stat.stat.gr_name == 'root' %}
+          PASS: Mode={{ sshd_config_stat.stat.mode }} Owner=root:root
+          {% else %}
+          FAIL: Mode={{ sshd_config_stat.stat.mode }} Owner={{ sshd_config_stat.stat.pw_name }}:{{ sshd_config_stat.stat.gr_name }}
+          — Expected 0600 root:root{% endif %}
+      tags: [audit, sshd, cis_5.1.1]
+
+    - name: "REMEDIATE | 5.1.1 | Set sshd_config permissions to 0600 root:root"
+      ansible.builtin.file:
+        path: "{{ sshd_config_path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      when:
+        - not audit_only
+        - sshd_config_stat.stat.exists
+        - sshd_config_stat.stat.mode not in ['0600','0400'] or
+          sshd_config_stat.stat.pw_name != 'root' or
+          sshd_config_stat.stat.gr_name != 'root'
+      tags: [remediate, sshd, cis_5.1.1]
+
+    - name: "REMEDIATE | 5.1.1 | Set permissions on sshd_config.d/*.conf files"
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ sshd_conf_d_files.files }}"
+      loop_control:
+        label: "{{ item.path }}"
+      when:
+        - not audit_only
+        - sshd_conf_d_files.files | length > 0
+      tags: [remediate, sshd, cis_5.1.1]
+
+    # ── 5.1.2 — SSH private key permissions ──────────────────────────────────
+
+    - name: "AUDIT | 5.1.2 | Find SSH private host key files"
+      ansible.builtin.shell: |
+        find -L /etc/ssh -xdev -type f -print0 2>/dev/null \
+          | xargs -0 file 2>/dev/null \
+          | grep -Pi '\bopenssh\b.*\bprivate\b' \
+          | cut -d: -f1
+      register: ssh_private_keys
+      changed_when: false
+      tags: [audit, sshd, cis_5.1.2]
+
+    - name: "AUDIT | 5.1.2 | Check private key permissions"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: true
+      loop: "{{ ssh_private_keys.stdout_lines }}"
+      register: ssh_privkey_stats
+      tags: [audit, sshd, cis_5.1.2]
+
+    - name: "AUDIT | 5.1.2 | Report private key status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.1.2 ({{ item.stat.path }}) —
+          {% if item.stat.mode in ['0600','0400'] and item.stat.pw_name == 'root' and item.stat.gr_name == 'root' %}
+          PASS: Mode={{ item.stat.mode }} Owner=root:root
+          {% else %}
+          FAIL: Mode={{ item.stat.mode }} Owner={{ item.stat.pw_name }}:{{ item.stat.gr_name }}
+          — Expected 0600 root:root{% endif %}
+      loop: "{{ ssh_privkey_stats.results }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+      when: ssh_privkey_stats.results | length > 0
+      tags: [audit, sshd, cis_5.1.2]
+
+    - name: "REMEDIATE | 5.1.2 | Fix SSH private key permissions"
+      ansible.builtin.file:
+        path: "{{ item.stat.path }}"
+        owner: root
+        group: root
+        mode: "0600"
+      loop: "{{ ssh_privkey_stats.results }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+      when:
+        - not audit_only
+        - item.stat.mode not in ['0600','0400'] or
+          item.stat.pw_name != 'root' or
+          item.stat.gr_name != 'root'
+      tags: [remediate, sshd, cis_5.1.2]
+
+    # ── 5.1.3 — SSH public key permissions ───────────────────────────────────
+
+    - name: "AUDIT | 5.1.3 | Find SSH public host key files"
+      ansible.builtin.shell: |
+        find -L /etc/ssh -xdev -type f -print0 2>/dev/null \
+          | xargs -0 file 2>/dev/null \
+          | grep -Pi '\bopenssh\b.*\bpublic\b' \
+          | cut -d: -f1
+      register: ssh_public_keys
+      changed_when: false
+      tags: [audit, sshd, cis_5.1.3]
+
+    - name: "AUDIT | 5.1.3 | Check public key permissions"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        follow: true
+      loop: "{{ ssh_public_keys.stdout_lines }}"
+      register: ssh_pubkey_stats
+      tags: [audit, sshd, cis_5.1.3]
+
+    - name: "AUDIT | 5.1.3 | Report public key status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.1.3 ({{ item.stat.path }}) —
+          {% if item.stat.mode in ['0644','0640','0600'] and item.stat.pw_name == 'root' and item.stat.gr_name == 'root' %}
+          PASS: Mode={{ item.stat.mode }} Owner=root:root
+          {% else %}
+          FAIL: Mode={{ item.stat.mode }} Owner={{ item.stat.pw_name }}:{{ item.stat.gr_name }}
+          — Expected 0644 root:root{% endif %}
+      loop: "{{ ssh_pubkey_stats.results }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+      when: ssh_pubkey_stats.results | length > 0
+      tags: [audit, sshd, cis_5.1.3]
+
+    - name: "REMEDIATE | 5.1.3 | Fix SSH public key permissions"
+      ansible.builtin.file:
+        path: "{{ item.stat.path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ ssh_pubkey_stats.results }}"
+      loop_control:
+        label: "{{ item.stat.path }}"
+      when:
+        - not audit_only
+        - item.stat.mode not in ['0644','0640','0600'] or
+          item.stat.pw_name != 'root' or
+          item.stat.gr_name != 'root'
+      tags: [remediate, sshd, cis_5.1.3]
+
+    # ── 5.1.4 — sshd access control ──────────────────────────────────────────
+
+    - name: "AUDIT | 5.1.4 | Check sshd AllowUsers/AllowGroups/DenyUsers/DenyGroups"
+      ansible.builtin.command:
+        cmd: sshd -T
+      register: sshd_t_output
+      changed_when: false
+      tags: [audit, sshd, cis_5.1.4]
+
+    - name: "AUDIT | 5.1.4 | Report access control directives"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 5.1.4 SSHD ACCESS CONTROL ───────────────────────────────
+          {% set access_lines = sshd_t_output.stdout_lines
+             | select('match', '^(allow|deny)(users|groups)\\s+\\S+', 'i')
+             | list %}
+          {% if access_lines %}
+          PASS: Access control directive(s) found:
+          {% for line in access_lines %}  {{ line }}
+          {% endfor %}
+          {% else %}
+          FAIL: No AllowUsers/AllowGroups/DenyUsers/DenyGroups configured.
+          {% endif %}
+          ─────────────────────────────────────────────────────────────────
+      tags: [audit, sshd, cis_5.1.4]
+
+    - name: "REMEDIATE | 5.1.4 | Set AllowUsers in sshd_config"
+      ansible.builtin.lineinfile:
+        path: "{{ sshd_config_path }}"
+        regexp: '(?i)^\s*AllowUsers\s'
+        line: "AllowUsers {{ sshd_allow_users }}"
+        insertbefore: "^Include|^Match"
+        state: present
+      when:
+        - not audit_only
+        - sshd_allow_users | length > 0
+      notify: Reload sshd
+      tags: [remediate, sshd, cis_5.1.4]
+
+    - name: "REMEDIATE | 5.1.4 | Set AllowGroups in sshd_config"
+      ansible.builtin.lineinfile:
+        path: "{{ sshd_config_path }}"
+        regexp: '(?i)^\s*AllowGroups\s'
+        line: "AllowGroups {{ sshd_allow_groups }}"
+        insertbefore: "^Include|^Match"
+        state: present
+      when:
+        - not audit_only
+        - sshd_allow_groups | length > 0
+        - sshd_allow_users | length == 0
+      notify: Reload sshd
+      tags: [remediate, sshd, cis_5.1.4]
+
+    - name: "REMEDIATE | 5.1.4 | Warn if no access control vars are set"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  CIS 5.1.4 — MANUAL ACTION REQUIRED                            ║
+          ║  Set sshd_allow_users or sshd_allow_groups in vars and re-run, ║
+          ║  OR manually edit {{ sshd_config_path }} to add:              ║
+          ║    AllowUsers <userlist>                                        ║
+          ║    AllowGroups <grouplist>                                      ║
+          ╚══════════════════════════════════════════════════════════════════╝
+      when:
+        - sshd_allow_users | length == 0
+        - sshd_allow_groups | length == 0
+      tags: [remediate, sshd, cis_5.1.4]
+
+    # ── 5.1.5 — sshd Banner ───────────────────────────────────────────────────
+
+    - name: "AUDIT | 5.1.5 | Check sshd Banner setting"
+      ansible.builtin.shell: |
+        sshd -T | grep -Pi '^banner\s+/\S+'
+      register: sshd_banner_check
+      changed_when: false
+      failed_when: false
+      tags: [audit, sshd, cis_5.1.5]
+
+    - name: "AUDIT | 5.1.5 | Report Banner status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.1.5 (sshd Banner) —
+          {% if sshd_banner_check.stdout != '' %}PASS: {{ sshd_banner_check.stdout }}
+          {% else %}FAIL: No Banner configured in sshd{% endif %}
+      tags: [audit, sshd, cis_5.1.5]
+
+    - name: "REMEDIATE | 5.1.5 | Set Banner to {{ sshd_banner_file }} in sshd_config"
+      ansible.builtin.lineinfile:
+        path: "{{ sshd_config_path }}"
+        regexp: '(?i)^\s*Banner\s'
+        line: "Banner {{ sshd_banner_file }}"
+        insertbefore: "^Include|^Match"
+        state: present
+      when:
+        - not audit_only
+        - sshd_banner_check.stdout == ''
+      notify: Reload sshd
+      tags: [remediate, sshd, cis_5.1.5]
+
+    # ── 5.1.9-5.1.22 — sshd directive hardening ──────────────────────────────
+    # Handled as a single loop for efficiency — audit then remediate each param.
+
+    - name: "AUDIT | 5.1.9-5.1.22 | Collect sshd -T effective configuration"
+      ansible.builtin.command:
+        cmd: sshd -T
+      register: sshd_effective_config
+      changed_when: false
+      tags:
+        [
+          audit,
+          sshd,
+          cis_5.1.9,
+          cis_5.1.10,
+          cis_5.1.11,
+          cis_5.1.19,
+          cis_5.1.20,
+          cis_5.1.22,
+        ]
+
+    - name: "AUDIT | 5.1.9-5.1.22 | Report sshd directive compliance"
+      ansible.builtin.debug:
+        msg: >-
+          CIS {{ item.cis }} ({{ item.param }}) —
+          {% set actual = sshd_effective_config.stdout_lines
+             | select('match', '^' + item.param + '\\s', 'i') | list | first | default('') %}
+          {% if actual | lower == item.param | lower + ' ' + item.expected | lower %}
+          PASS: {{ actual }}
+          {% else %}
+          FAIL: Got '{{ actual | default('(not found)') }}' — Expected '{{ item.param }} {{ item.expected }}'
+          {% endif %}
+      loop:
+        - { cis: "5.1.9", param: "gssapiauthentication", expected: "no" }
+        - { cis: "5.1.10", param: "hostbasedauthentication", expected: "no" }
+        - { cis: "5.1.11", param: "ignorerhosts", expected: "yes" }
+        - { cis: "5.1.19", param: "permitemptypasswords", expected: "no" }
+        - { cis: "5.1.20", param: "permitrootlogin", expected: "no" }
+        - { cis: "5.1.22", param: "usepam", expected: "yes" }
+      loop_control:
+        label: "{{ item.cis }} {{ item.param }}"
+      tags:
+        [
+          audit,
+          sshd,
+          cis_5.1.9,
+          cis_5.1.10,
+          cis_5.1.11,
+          cis_5.1.19,
+          cis_5.1.20,
+          cis_5.1.22,
+        ]
+
+    - name: "REMEDIATE | 5.1.9-5.1.22 | Enforce sshd directives in sshd_config"
+      ansible.builtin.lineinfile:
+        path: "{{ sshd_config_path }}"
+        regexp: "(?i)^\\s*{{ item.param }}\\s"
+        line: "{{ item.param | capitalize }} {{ item.expected }}"
+        insertbefore: "^Include|^Match"
+        state: present
+      loop:
+        - { cis: "5.1.9", param: "GSSAPIAuthentication", expected: "no" }
+        - { cis: "5.1.10", param: "HostbasedAuthentication", expected: "no" }
+        - { cis: "5.1.11", param: "IgnoreRhosts", expected: "yes" }
+        - { cis: "5.1.19", param: "PermitEmptyPasswords", expected: "no" }
+        - { cis: "5.1.20", param: "PermitRootLogin", expected: "no" }
+        - { cis: "5.1.22", param: "UsePAM", expected: "yes" }
+      loop_control:
+        label: "{{ item.cis }} {{ item.param }}"
+      when: not audit_only
+      notify: Reload sshd
+      tags:
+        [
+          remediate,
+          sshd,
+          cis_5.1.9,
+          cis_5.1.10,
+          cis_5.1.11,
+          cis_5.1.19,
+          cis_5.1.20,
+          cis_5.1.22,
+        ]
+
+    # =========================================================================
+    # SECTION 5.2 — sudo Hardening
+    # =========================================================================
+
+    # ── 5.2.1 — sudo installed ────────────────────────────────────────────────
+
+    - name: "AUDIT | 5.2.1 | Check sudo or sudo-ldap is installed"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.2.1 (sudo installed) —
+          {% if 'sudo' in ansible_facts.packages %}PASS: sudo is installed ({{ ansible_facts.packages['sudo'][0].version }})
+          {% elif 'sudo-ldap' in ansible_facts.packages %}PASS: sudo-ldap is installed
+          {% else %}FAIL: Neither sudo nor sudo-ldap is installed{% endif %}
+      tags: [audit, sudo, cis_5.2.1]
+
+    - name: "REMEDIATE | 5.2.1 | Install sudo"
+      ansible.builtin.apt:
+        name: sudo
+        state: present
+      when:
+        - not audit_only
+        - "'sudo' not in ansible_facts.packages"
+        - "'sudo-ldap' not in ansible_facts.packages"
+      tags: [remediate, sudo, cis_5.2.1]
+
+    # ── 5.2.2 — sudo use_pty ──────────────────────────────────────────────────
+
+    - name: "AUDIT | 5.2.2 | Check sudo use_pty is set"
+      ansible.builtin.shell: |
+        grep -rPi '^\s*Defaults\s+([^#\n\r]+,\s*)?use_pty\b' /etc/sudoers* 2>/dev/null || true
+      register: sudo_use_pty
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.2]
+
+    - name: "AUDIT | 5.2.2 | Check sudo !use_pty is NOT set"
+      ansible.builtin.shell: |
+        grep -rPi '^\s*Defaults\s+([^#\n\r]+,\s*)?!use_pty\b' /etc/sudoers* 2>/dev/null || true
+      register: sudo_no_use_pty
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.2]
+
+    - name: "AUDIT | 5.2.2 | Report use_pty status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.2.2 (sudo use_pty) —
+          {% if sudo_use_pty.stdout != '' and sudo_no_use_pty.stdout == '' %}PASS: use_pty is set
+          {% elif sudo_no_use_pty.stdout != '' %}FAIL: !use_pty is explicitly set — must be removed
+          {% else %}FAIL: use_pty is not configured{% endif %}
+      tags: [audit, sudo, cis_5.2.2]
+
+    - name: "REMEDIATE | 5.2.2 | Add Defaults use_pty to /etc/sudoers.d/cis_use_pty"
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/cis_use_pty
+        content: "Defaults use_pty\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+      when:
+        - not audit_only
+        - sudo_use_pty.stdout == ''
+      tags: [remediate, sudo, cis_5.2.2]
+
+    - name: "REMEDIATE | 5.2.2 | Remove !use_pty from sudoers if present"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '(,\s*!use_pty\b|\b!use_pty\b,?\s*)'
+        replace: ""
+      loop: "{{ sudo_no_use_pty.stdout_lines }}"
+      when:
+        - not audit_only
+        - sudo_no_use_pty.stdout != ''
+      tags: [remediate, sudo, cis_5.2.2]
+
+    # ── 5.2.4 — No NOPASSWD in sudoers ────────────────────────────────────────
+
+    - name: "AUDIT | 5.2.4 | Check for NOPASSWD in sudoers"
+      ansible.builtin.shell: |
+        grep -r '^[^#].*NOPASSWD' /etc/sudoers* 2>/dev/null || true
+      register: sudo_nopasswd
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.4]
+
+    - name: "AUDIT | 5.2.4 | Report NOPASSWD status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.2.4 (no NOPASSWD) —
+          {% if sudo_nopasswd.stdout == '' %}PASS: No NOPASSWD entries found
+          {% else %}FAIL: NOPASSWD found — remove manually with visudo:
+          {{ sudo_nopasswd.stdout }}{% endif %}
+      tags: [audit, sudo, cis_5.2.4]
+
+    - name: "REMEDIATE | 5.2.4 | NOPASSWD — manual action required"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  CIS 5.2.4 — MANUAL ACTION REQUIRED                            ║
+          ║  NOPASSWD entries must be removed with:                        ║
+          ║    visudo -f <file>                                             ║
+          ║  Automated removal is intentionally skipped to avoid breaking  ║
+          ║  critical automation accounts. Review each entry carefully.    ║
+          ╚══════════════════════════════════════════════════════════════════╝
+      when: sudo_nopasswd.stdout != ''
+      tags: [remediate, sudo, cis_5.2.4]
+
+    # ── 5.2.5 — No !authenticate in sudoers ──────────────────────────────────
+
+    - name: "AUDIT | 5.2.5 | Check for !authenticate in sudoers"
+      ansible.builtin.shell: |
+        grep -r '^[^#].*!authenticate' /etc/sudoers* 2>/dev/null || true
+      register: sudo_no_auth
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.5]
+
+    - name: "AUDIT | 5.2.5 | Report !authenticate status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.2.5 (no !authenticate) —
+          {% if sudo_no_auth.stdout == '' %}PASS: No !authenticate entries found
+          {% else %}FAIL: !authenticate found in: {{ sudo_no_auth.stdout }}{% endif %}
+      tags: [audit, sudo, cis_5.2.5]
+
+    - name: "REMEDIATE | 5.2.5 | Remove !authenticate from sudoers"
+      ansible.builtin.replace:
+        path: "{{ item.split(':')[0] }}"
+        regexp: '(,\s*!authenticate\b|\b!authenticate\b,?\s*)'
+        replace: ""
+      loop: "{{ sudo_no_auth.stdout_lines }}"
+      when:
+        - not audit_only
+        - sudo_no_auth.stdout != ''
+      tags: [remediate, sudo, cis_5.2.5]
+
+    # ── 5.2.6 — sudo timestamp_timeout ───────────────────────────────────────
+
+    - name: "AUDIT | 5.2.6 | Check sudo timestamp_timeout"
+      ansible.builtin.shell: |
+        grep -roP 'timestamp_timeout=\K[0-9-]+' /etc/sudoers* 2>/dev/null \
+          || sudo -V 2>/dev/null | grep -oP 'Authentication timestamp timeout:\s*\K[0-9.]+'
+      register: sudo_timeout_check
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.6]
+
+    - name: "AUDIT | 5.2.6 | Report timestamp_timeout"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.2.6 (timestamp_timeout) —
+          {% set t = sudo_timeout_check.stdout | trim %}
+          {% if t == '' %}INFO: Using default (5 min) — verify this meets site policy (<= 15 min)
+          {% elif t | int < 0 %}FAIL: timeout={{ t }} — disabled (negative value not allowed)
+          {% elif t | int > 15 %}FAIL: timeout={{ t }} min — exceeds 15-minute maximum
+          {% else %}PASS: timeout={{ t }} min{% endif %}
+      tags: [audit, sudo, cis_5.2.6]
+
+    - name: "REMEDIATE | 5.2.6 | Set timestamp_timeout in /etc/sudoers.d/cis_timeout"
+      ansible.builtin.copy:
+        dest: /etc/sudoers.d/cis_timeout
+        content: "Defaults timestamp_timeout={{ sudo_timestamp_timeout }}\n"
+        owner: root
+        group: root
+        mode: "0440"
+        validate: "visudo -cf %s"
+      when:
+        - not audit_only
+        - sudo_timeout_check.stdout | trim | int > sudo_timestamp_timeout or
+          sudo_timeout_check.stdout | trim | int < 0 or
+          sudo_timeout_check.stdout | trim == ''
+      tags: [remediate, sudo, cis_5.2.6]
+
+    # ── 5.2.7 — restrict su command ───────────────────────────────────────────
+
+    - name: "AUDIT | 5.2.7 | Check pam_wheel.so restricts su"
+      ansible.builtin.shell: |
+        grep -Pi '^\s*auth\s+(required|requisite)\s+pam_wheel\.so\s+.*use_uid.*group=\S+' \
+          /etc/pam.d/su 2>/dev/null || true
+      register: pam_su_check
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.7]
+
+    - name: "AUDIT | 5.2.7 | Check su restrict group is empty"
+      ansible.builtin.shell: |
+        grep "^{{ su_restrict_group }}:" /etc/group 2>/dev/null || true
+      register: su_group_check
+      changed_when: false
+      tags: [audit, sudo, cis_5.2.7]
+
+    - name: "AUDIT | 5.2.7 | Report su restriction status"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 5.2.7 SU COMMAND RESTRICTION ─────────────────────────────
+          pam_wheel rule : {{ pam_su_check.stdout | default('(not set)') }}
+          restrict group : {{ su_group_check.stdout | default('(not found)') }}
+          {% if pam_su_check.stdout != '' and su_group_check.stdout != '' %}
+          {% set members = su_group_check.stdout.split(':')[3] | default('') %}
+          {% if members == '' %}
+          PASS: pam_wheel configured and group {{ su_restrict_group }} is empty
+          {% else %}
+          FAIL: Group {{ su_restrict_group }} has members: {{ members }} — should be empty
+          {% endif %}
+          {% else %}
+          FAIL: su restriction not fully configured — remediation required
+          {% endif %}
+          ─────────────────────────────────────────────────────────────────
+      tags: [audit, sudo, cis_5.2.7]
+
+    - name: "REMEDIATE | 5.2.7 | Create empty su restrict group"
+      ansible.builtin.group:
+        name: "{{ su_restrict_group }}"
+        state: present
+        system: true
+      when:
+        - not audit_only
+        - su_group_check.stdout == ''
+      tags: [remediate, sudo, cis_5.2.7]
+
+    - name: "REMEDIATE | 5.2.7 | Add pam_wheel.so rule to /etc/pam.d/su"
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/su
+        regexp: '^\s*auth\s+(required|requisite)\s+pam_wheel\.so'
+        line: "auth required pam_wheel.so use_uid group={{ su_restrict_group }}"
+        insertafter: "^#.*pam_wheel"
+        state: present
+      when:
+        - not audit_only
+        - pam_su_check.stdout == ''
+      tags: [remediate, sudo, cis_5.2.7]
+
+    # =========================================================================
+    # SECTION 5.3 — PAM & Password Policy Hardening
+    # =========================================================================
+
+    # ── 5.3.1.3 — libpam-pwquality installed ─────────────────────────────────
+
+    - name: "AUDIT | 5.3.1.3 | Check libpam-pwquality is installed and up to date"
+      ansible.builtin.shell: |
+        dpkg-query -s libpam-pwquality &>/dev/null && echo "installed" || echo "missing"
+      register: pwquality_pkg_check
+      changed_when: false
+      tags: [audit, pam, cis_5.3.1.3]
+
+    - name: "AUDIT | 5.3.1.3 | Check libpam-pwquality upgradable"
+      ansible.builtin.shell: |
+        apt list --upgradable 2>/dev/null | grep -P '^libpam-pwquality\b' || true
+      register: pwquality_upgradable
+      changed_when: false
+      tags: [audit, pam, cis_5.3.1.3]
+
+    - name: "AUDIT | 5.3.1.3 | Report libpam-pwquality status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.1.3 (libpam-pwquality) —
+          {% if pwquality_pkg_check.stdout == 'installed' and pwquality_upgradable.stdout == '' %}
+          PASS: installed and up to date
+          {% elif pwquality_pkg_check.stdout == 'installed' and pwquality_upgradable.stdout != '' %}
+          FAIL: installed but upgrade available — {{ pwquality_upgradable.stdout }}
+          {% else %}
+          FAIL: libpam-pwquality is NOT installed
+          {% endif %}
+      tags: [audit, pam, cis_5.3.1.3]
+
+    - name: "REMEDIATE | 5.3.1.3 | Install / upgrade libpam-pwquality"
+      ansible.builtin.apt:
+        name: libpam-pwquality
+        state: latest
+        update_cache: false
+      when:
+        - not audit_only
+        - pwquality_pkg_check.stdout == 'missing' or pwquality_upgradable.stdout != ''
+      tags: [remediate, pam, cis_5.3.1.3]
+
+    # ── 5.3.2.1 — pam_unix module enabled ─────────────────────────────────────
+
+    - name: "AUDIT | 5.3.2.1 | Verify pam_unix.so in all common PAM files"
+      ansible.builtin.shell: |
+        grep -PH '\bpam_unix\.so\b' \
+          /etc/pam.d/common-account \
+          /etc/pam.d/common-auth \
+          /etc/pam.d/common-password \
+          /etc/pam.d/common-session \
+          /etc/pam.d/common-session-noninteractive 2>/dev/null || true
+      register: pam_unix_check
+      changed_when: false
+      tags: [audit, pam, cis_5.3.2.1]
+
+    - name: "AUDIT | 5.3.2.1 | Report pam_unix status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.2.1 (pam_unix) —
+          {% if pam_unix_check.stdout != '' %}PASS: pam_unix.so found in PAM files
+          {% else %}FAIL: pam_unix.so NOT found — run: pam-auth-update --enable unix{% endif %}
+      tags: [audit, pam, cis_5.3.2.1]
+
+    - name: "REMEDIATE | 5.3.2.1 | Enable pam_unix via pam-auth-update"
+      ansible.builtin.command:
+        cmd: pam-auth-update --enable unix --force
+      when:
+        - not audit_only
+        - pam_unix_check.stdout == ''
+      changed_when: true
+      tags: [remediate, pam, cis_5.3.2.1]
+
+    # ── 5.3.2.2 — pam_faillock module enabled ────────────────────────────────
+
+    - name: "AUDIT | 5.3.2.2 | Check pam_faillock.so in common-auth and common-account"
+      ansible.builtin.shell: |
+        grep -P '\bpam_faillock\.so\b' \
+          /etc/pam.d/common-auth \
+          /etc/pam.d/common-account 2>/dev/null || true
+      register: pam_faillock_check
+      changed_when: false
+      tags: [audit, pam, cis_5.3.2.2]
+
+    - name: "AUDIT | 5.3.2.2 | Report pam_faillock status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.2.2 (pam_faillock) —
+          {% if pam_faillock_check.stdout != '' %}PASS: pam_faillock.so configured in PAM
+          {% else %}FAIL: pam_faillock.so NOT found — remediation required{% endif %}
+      tags: [audit, pam, cis_5.3.2.2]
+
+    - name: "REMEDIATE | 5.3.2.2 | Create faillock pam-auth-update profile"
+      ansible.builtin.copy:
+        dest: /usr/share/pam-configs/faillock
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Name: Enable pam_faillock to deny access
+          Default: yes
+          Priority: 0
+          Auth-Type: Primary
+          Auth:
+           [default=die] pam_faillock.so authfail
+      when:
+        - not audit_only
+        - pam_faillock_check.stdout == ''
+      tags: [remediate, pam, cis_5.3.2.2]
+
+    - name: "REMEDIATE | 5.3.2.2 | Create faillock_notify pam-auth-update profile"
+      ansible.builtin.copy:
+        dest: /usr/share/pam-configs/faillock_notify
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Name: Notify of failed login attempts and reset count upon success
+          Default: yes
+          Priority: 1024
+          Auth-Type: Primary
+          Auth:
+           requisite pam_faillock.so preauth
+          Account-Type: Primary
+          Account:
+           required pam_faillock.so
+      when:
+        - not audit_only
+        - pam_faillock_check.stdout == ''
+      tags: [remediate, pam, cis_5.3.2.2]
+
+    - name: "REMEDIATE | 5.3.2.2 | Enable faillock and faillock_notify profiles"
+      ansible.builtin.command:
+        cmd: "pam-auth-update --enable {{ item }} --force"
+      loop:
+        - faillock
+        - faillock_notify
+      when:
+        - not audit_only
+        - pam_faillock_check.stdout == ''
+      changed_when: true
+      tags: [remediate, pam, cis_5.3.2.2]
+
+    # ── 5.3.2.3 — pam_pwquality module enabled ───────────────────────────────
+
+    - name: "AUDIT | 5.3.2.3 | Check pam_pwquality.so in common-password"
+      ansible.builtin.shell: |
+        grep -P '\bpam_pwquality\.so\b' /etc/pam.d/common-password 2>/dev/null || true
+      register: pam_pwquality_check
+      changed_when: false
+      tags: [audit, pam, cis_5.3.2.3]
+
+    - name: "AUDIT | 5.3.2.3 | Report pam_pwquality status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.2.3 (pam_pwquality) —
+          {% if pam_pwquality_check.stdout != '' %}PASS: {{ pam_pwquality_check.stdout | trim }}
+          {% else %}FAIL: pam_pwquality.so NOT found in common-password{% endif %}
+      tags: [audit, pam, cis_5.3.2.3]
+
+    - name: "REMEDIATE | 5.3.2.3 | Create pwquality pam-auth-update profile"
+      ansible.builtin.copy:
+        dest: /usr/share/pam-configs/pwquality
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Name: Pwquality password strength checking
+          Default: yes
+          Priority: 1024
+          Conflicts: cracklib
+          Password-Type: Primary
+          Password:
+           requisite pam_pwquality.so retry=3
+      when:
+        - not audit_only
+        - pam_pwquality_check.stdout == ''
+      tags: [remediate, pam, cis_5.3.2.3]
+
+    - name: "REMEDIATE | 5.3.2.3 | Enable pwquality profile"
+      ansible.builtin.command:
+        cmd: pam-auth-update --enable pwquality --force
+      when:
+        - not audit_only
+        - pam_pwquality_check.stdout == ''
+      changed_when: true
+      tags: [remediate, pam, cis_5.3.2.3]
+
+    # ── 5.3.2.4 — pam_pwhistory module enabled ───────────────────────────────
+
+    - name: "AUDIT | 5.3.2.4 | Check pam_pwhistory.so in common-password"
+      ansible.builtin.shell: |
+        grep -P '\bpam_pwhistory\.so\b' /etc/pam.d/common-password 2>/dev/null || true
+      register: pam_pwhistory_check
+      changed_when: false
+      tags: [audit, pam, cis_5.3.2.4]
+
+    - name: "AUDIT | 5.3.2.4 | Report pam_pwhistory status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.2.4 (pam_pwhistory) —
+          {% if pam_pwhistory_check.stdout != '' %}PASS: {{ pam_pwhistory_check.stdout | trim }}
+          {% else %}FAIL: pam_pwhistory.so NOT found in common-password{% endif %}
+      tags: [audit, pam, cis_5.3.2.4]
+
+    - name: "REMEDIATE | 5.3.2.4 | Create pwhistory pam-auth-update profile"
+      ansible.builtin.copy:
+        dest: /usr/share/pam-configs/pwhistory
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          Name: pwhistory password history checking
+          Default: yes
+          Priority: 1024
+          Password-Type: Primary
+          Password:
+           requisite pam_pwhistory.so remember={{ pwhistory_remember }} enforce_for_root use_authtok
+      when:
+        - not audit_only
+        - pam_pwhistory_check.stdout == ''
+      tags: [remediate, pam, cis_5.3.2.4]
+
+    - name: "REMEDIATE | 5.3.2.4 | Enable pwhistory profile"
+      ansible.builtin.command:
+        cmd: pam-auth-update --enable pwhistory --force
+      when:
+        - not audit_only
+        - pam_pwhistory_check.stdout == ''
+      changed_when: true
+      tags: [remediate, pam, cis_5.3.2.4]
+
+    # ── 5.3.3.1.1 — faillock deny (max failed attempts) ──────────────────────
+
+    - name: "AUDIT | 5.3.3.1.1 | Check faillock deny value"
+      ansible.builtin.shell: |
+        grep -Pi '^\s*deny\s*=\s*[1-5]\b' {{ faillock_conf }} 2>/dev/null || echo "NOT_SET"
+      register: faillock_deny_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.1.1]
+
+    - name: "AUDIT | 5.3.3.1.1 | Check deny not overridden in pam.d"
+      ansible.builtin.shell: |
+        grep -Pi '^\s*auth\s+(requisite|required|sufficient)\s+pam_faillock\.so\s+.*deny\s*=\s*(0|[6-9]|[1-9][0-9]+)\b' \
+          /etc/pam.d/common-auth 2>/dev/null || true
+      register: faillock_deny_pam_override
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.1.1]
+
+    - name: "AUDIT | 5.3.3.1.1 | Report faillock deny status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.3.1.1 (faillock deny) —
+          {% if faillock_deny_check.stdout != 'NOT_SET' and faillock_deny_pam_override.stdout == '' %}
+          PASS: {{ faillock_deny_check.stdout | trim }}
+          {% elif faillock_deny_pam_override.stdout != '' %}
+          FAIL: deny overridden in pam.d: {{ faillock_deny_pam_override.stdout | trim }}
+          {% else %}
+          FAIL: deny not set in {{ faillock_conf }}
+          {% endif %}
+      tags: [audit, pam, password, cis_5.3.3.1.1]
+
+    - name: "REMEDIATE | 5.3.3.1.1 | Ensure {{ faillock_conf }} exists"
+      ansible.builtin.file:
+        path: "{{ faillock_conf }}"
+        state: touch
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - not audit_only
+        - faillock_deny_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.1.1]
+
+    - name: "REMEDIATE | 5.3.3.1.1 | Set deny = {{ faillock_deny }} in faillock.conf"
+      ansible.builtin.lineinfile:
+        path: "{{ faillock_conf }}"
+        regexp: '^\s*#?\s*deny\s*='
+        line: "deny = {{ faillock_deny }}"
+        state: present
+      when:
+        - not audit_only
+        - faillock_deny_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.1.1]
+
+    # ── 5.3.3.1.2 — faillock unlock_time ─────────────────────────────────────
+
+    - name: "AUDIT | 5.3.3.1.2 | Check faillock unlock_time value"
+      ansible.builtin.shell: |
+        grep -Pi '^\s*unlock_time\s*=\s*(0|9[0-9][0-9]|[1-9][0-9]{3,})\b' \
+          {{ faillock_conf }} 2>/dev/null || echo "NOT_SET"
+      register: faillock_unlock_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.1.2]
+
+    - name: "AUDIT | 5.3.3.1.2 | Check unlock_time not overridden in pam.d (too short)"
+      ansible.builtin.shell: |
+        grep -Pi '^\s*auth\s+(requisite|required|sufficient)\s+pam_faillock\.so\s+.*unlock_time\s*=\s*([1-9]|[1-9][0-9]|[1-8][0-9][0-9])\b' \
+          /etc/pam.d/common-auth 2>/dev/null || true
+      register: faillock_unlock_pam_override
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.1.2]
+
+    - name: "AUDIT | 5.3.3.1.2 | Report unlock_time status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.3.1.2 (faillock unlock_time) —
+          {% if faillock_unlock_check.stdout != 'NOT_SET' and faillock_unlock_pam_override.stdout == '' %}
+          PASS: {{ faillock_unlock_check.stdout | trim }}
+          {% elif faillock_unlock_pam_override.stdout != '' %}
+          FAIL: unlock_time overridden in pam.d (too short): {{ faillock_unlock_pam_override.stdout | trim }}
+          {% else %}
+          FAIL: unlock_time not configured in {{ faillock_conf }}
+          {% endif %}
+      tags: [audit, pam, password, cis_5.3.3.1.2]
+
+    - name: "REMEDIATE | 5.3.3.1.2 | Set unlock_time = {{ faillock_unlock_time }} in faillock.conf"
+      ansible.builtin.lineinfile:
+        path: "{{ faillock_conf }}"
+        regexp: '^\s*#?\s*unlock_time\s*='
+        line: "unlock_time = {{ faillock_unlock_time }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - not audit_only
+        - faillock_unlock_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.1.2]
+
+    # ── 5.3.3.2.1 — pwquality difok ──────────────────────────────────────────
+
+    - name: "AUDIT | 5.3.3.2.1 | Check pwquality difok value"
+      ansible.builtin.shell: |
+        grep -Psi '^\s*difok\s*=\s*([2-9]|[1-9][0-9]+)\b' \
+          /etc/security/pwquality.conf \
+          {{ pwquality_conf_d }}/*.conf 2>/dev/null || echo "NOT_SET"
+      register: pwquality_difok_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.2.1]
+
+    - name: "AUDIT | 5.3.3.2.1 | Report difok status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.3.2.1 (pwquality difok) —
+          {% if pwquality_difok_check.stdout != 'NOT_SET' %}PASS: {{ pwquality_difok_check.stdout | trim }}
+          {% else %}FAIL: difok not set or below minimum (2){% endif %}
+      tags: [audit, pam, password, cis_5.3.3.2.1]
+
+    - name: "REMEDIATE | 5.3.3.2.1 | Ensure pwquality.conf.d directory exists"
+      ansible.builtin.file:
+        path: "{{ pwquality_conf_d }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: not audit_only
+      tags:
+        [remediate, pam, password, cis_5.3.3.2.1, cis_5.3.3.2.2, cis_5.3.3.2.3]
+
+    - name: "REMEDIATE | 5.3.3.2.1 | Set difok = {{ pwquality_difok }} in pwquality drop-in"
+      ansible.builtin.lineinfile:
+        path: "{{ pwquality_conf_d }}/50-pwdifok.conf"
+        regexp: '^\s*difok\s*='
+        line: "difok = {{ pwquality_difok }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - not audit_only
+        - pwquality_difok_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.2.1]
+
+    - name: "REMEDIATE | 5.3.3.2.1 | Comment out difok in base pwquality.conf"
+      ansible.builtin.replace:
+        path: /etc/security/pwquality.conf
+        regexp: '^(\s*difok\s*=)'
+        replace: '# \1'
+      when:
+        - not audit_only
+        - pwquality_difok_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.2.1]
+
+    # ── 5.3.3.2.2 — pwquality minlen ─────────────────────────────────────────
+
+    - name: "AUDIT | 5.3.3.2.2 | Check pwquality minlen value (>= 14)"
+      ansible.builtin.shell: |
+        grep -Psi '^\s*minlen\s*=\s*(1[4-9]|[2-9][0-9]|[1-9][0-9]{2,})\b' \
+          /etc/security/pwquality.conf \
+          {{ pwquality_conf_d }}/*.conf 2>/dev/null || echo "NOT_SET"
+      register: pwquality_minlen_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.2.2]
+
+    - name: "AUDIT | 5.3.3.2.2 | Check minlen not overridden too low in pam.d"
+      ansible.builtin.shell: |
+        grep -Psi '^\s*password\s+(requisite|required|sufficient)\s+pam_pwquality\.so\s+.*minlen\s*=\s*([0-9]|1[0-3])\b' \
+          /etc/pam.d/common-password 2>/dev/null || true
+      register: minlen_pam_override
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.2.2]
+
+    - name: "AUDIT | 5.3.3.2.2 | Report minlen status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.3.2.2 (pwquality minlen) —
+          {% if pwquality_minlen_check.stdout != 'NOT_SET' and minlen_pam_override.stdout == '' %}
+          PASS: {{ pwquality_minlen_check.stdout | trim }}
+          {% elif minlen_pam_override.stdout != '' %}
+          FAIL: minlen overridden too low in pam.d: {{ minlen_pam_override.stdout | trim }}
+          {% else %}
+          FAIL: minlen not configured or below 14
+          {% endif %}
+      tags: [audit, pam, password, cis_5.3.3.2.2]
+
+    - name: "REMEDIATE | 5.3.3.2.2 | Set minlen = {{ pwquality_minlen }} in pwquality drop-in"
+      ansible.builtin.lineinfile:
+        path: "{{ pwquality_conf_d }}/50-pwlength.conf"
+        regexp: '^\s*minlen\s*='
+        line: "minlen = {{ pwquality_minlen }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - not audit_only
+        - pwquality_minlen_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.2.2]
+
+    - name: "REMEDIATE | 5.3.3.2.2 | Comment out minlen in base pwquality.conf"
+      ansible.builtin.replace:
+        path: /etc/security/pwquality.conf
+        regexp: '^(\s*minlen\s*=)'
+        replace: '# \1'
+      when:
+        - not audit_only
+        - pwquality_minlen_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.2.2]
+
+    # ── 5.3.3.2.3 — pwquality complexity (Manual) ────────────────────────────
+
+    - name: "AUDIT | 5.3.3.2.3 | Check pwquality complexity settings"
+      ansible.builtin.shell: |
+        grep -Psi '^\s*(minclass|[dulo]credit)\b' \
+          /etc/security/pwquality.conf \
+          {{ pwquality_conf_d }}/*.conf 2>/dev/null || echo "NOT_SET"
+      register: pwquality_complexity_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.2.3]
+
+    - name: "AUDIT | 5.3.3.2.3 | Check complexity not overridden in pam.d"
+      ansible.builtin.shell: |
+        grep -Psi '^\s*password\s+(requisite|required|sufficient)\s+pam_pwquality\.so\s+.*minclass|[dulo]credit\b' \
+          /etc/pam.d/common-password 2>/dev/null || true
+      register: complexity_pam_override
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.2.3]
+
+    - name: "AUDIT | 5.3.3.2.3 | Report password complexity"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 5.3.3.2.3 PASSWORD COMPLEXITY ────────────────────────────
+          Current settings:
+          {{ pwquality_complexity_check.stdout | default('(none found)') }}
+          pam.d overrides: {{ complexity_pam_override.stdout | default('(none)') }}
+          ─────────────────────────────────────────────────────────────────
+          ACTION REQUIRED (Manual): Verify complexity meets site policy.
+          Values for dcredit/ucredit/lcredit/ocredit must be 0 or negative.
+      tags: [audit, pam, password, cis_5.3.3.2.3]
+
+    - name: "REMEDIATE | 5.3.3.2.3 | Set minclass = {{ pwquality_minclass }} in pwquality drop-in"
+      ansible.builtin.lineinfile:
+        path: "{{ pwquality_conf_d }}/50-pwcomplexity.conf"
+        regexp: '^\s*minclass\s*='
+        line: "minclass = {{ pwquality_minclass }}"
+        state: present
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+      when:
+        - not audit_only
+        - pwquality_complexity_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.2.3]
+
+    - name: "REMEDIATE | 5.3.3.2.3 | Comment out complexity settings in base pwquality.conf"
+      ansible.builtin.replace:
+        path: /etc/security/pwquality.conf
+        regexp: '^(\s*(minclass|[dulo]credit)\s*=)'
+        replace: '# \1'
+      when:
+        - not audit_only
+        - pwquality_complexity_check.stdout == 'NOT_SET'
+      tags: [remediate, pam, password, cis_5.3.3.2.3]
+
+    # ── 5.3.3.3.1 — pwhistory remember ───────────────────────────────────────
+
+    - name: "AUDIT | 5.3.3.3.1 | Check pam_pwhistory remember value (>= 24)"
+      ansible.builtin.shell: |
+        grep -Psi '^\s*password\s+[^\n]+\s+pam_pwhistory\.so\s+[^\n]*remember=([0-9]+)\b' \
+          /etc/pam.d/common-password 2>/dev/null || echo "NOT_SET"
+      register: pwhistory_remember_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.3.1]
+
+    - name: "AUDIT | 5.3.3.3.1 | Report pwhistory remember status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.3.3.1 (pwhistory remember) —
+          {% if pwhistory_remember_check.stdout != 'NOT_SET' %}
+          {% set val = pwhistory_remember_check.stdout | regex_search('remember=(\d+)', '\\1') %}
+          {% if val and val[0] | int >= 24 %}PASS: remember={{ val[0] }}
+          {% else %}FAIL: remember={{ val[0] | default('?') }} — must be >= 24{% endif %}
+          {% else %}FAIL: pam_pwhistory not configured with remember= in common-password{% endif %}
+      tags: [audit, pam, password, cis_5.3.3.3.1]
+
+    - name: "REMEDIATE | 5.3.3.3.1 | Update pwhistory profile with remember={{ pwhistory_remember }}"
+      ansible.builtin.replace:
+        path: /usr/share/pam-configs/pwhistory
+        regexp: '(pam_pwhistory\.so.*remember=)[0-9]+'
+        replace: '\g<1>{{ pwhistory_remember }}'
+      when:
+        - not audit_only
+        - pwhistory_remember_check.stdout == 'NOT_SET' or
+          (pwhistory_remember_check.stdout | regex_search('remember=(\d+)', '\\1') | first | int) < pwhistory_remember
+      failed_when: false
+      tags: [remediate, pam, password, cis_5.3.3.3.1]
+
+    - name: "REMEDIATE | 5.3.3.3.1 | Re-enable pwhistory to apply remember value"
+      ansible.builtin.command:
+        cmd: pam-auth-update --enable pwhistory --force
+      when:
+        - not audit_only
+        - pwhistory_remember_check.stdout == 'NOT_SET' or
+          (pwhistory_remember_check.stdout | regex_search('remember=(\d+)', '\\1') | first | int) < pwhistory_remember
+      failed_when: false
+      changed_when: true
+      tags: [remediate, pam, password, cis_5.3.3.3.1]
+
+    # =========================================================================
+    # SECTION 5.3.3.4 — PAM: nullok
+    # =========================================================================
+
+    - name: "AUDIT | 5.3.3.4.1 | Check nullok not present in pam_unix.so lines"
+      ansible.builtin.shell: |
+        grep -PHs '^\s*[^#\n\r]+\s+pam_unix\.so\s+([^#\n\r]+\s+)?nullok\b' \
+          /etc/pam.d/common-password \
+          /etc/pam.d/common-auth \
+          /etc/pam.d/common-account \
+          /etc/pam.d/common-session \
+          /etc/pam.d/common-session-noninteractive 2>/dev/null || true
+      register: pam_nullok_check
+      changed_when: false
+      tags: [audit, pam, password, cis_5.3.3.4.1]
+
+    - name: "AUDIT | 5.3.3.4.1 | Report nullok status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.3.3.4.1 (pam_unix nullok) —
+          {% if pam_nullok_check.stdout == '' %}PASS: nullok not found in pam_unix.so lines
+          {% else %}FAIL: nullok found — must be removed:
+          {{ pam_nullok_check.stdout }}{% endif %}
+      tags: [audit, pam, password, cis_5.3.3.4.1]
+
+    - name: "REMEDIATE | 5.3.3.4.1 | Check for nullok in pam-configs profiles"
+      ansible.builtin.shell: |
+        grep -Pl '\bpam_unix\.so\b.*\bnullok\b' /usr/share/pam-configs/* 2>/dev/null || true
+      register: pam_configs_nullok
+      changed_when: false
+      when:
+        - not audit_only
+        - pam_nullok_check.stdout != ''
+      tags: [remediate, pam, password, cis_5.3.3.4.1]
+
+    - name: "REMEDIATE | 5.3.3.4.1 | Remove nullok from pam-configs profile files"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '\bnullok\b\s*'
+        replace: ""
+      loop: "{{ pam_configs_nullok.stdout_lines | default([]) }}"
+      when:
+        - not audit_only
+        - pam_nullok_check.stdout != ''
+        - pam_configs_nullok.stdout_lines is defined
+        - pam_configs_nullok.stdout_lines | length > 0
+      tags: [remediate, pam, password, cis_5.3.3.4.1]
+
+    - name: "REMEDIATE | 5.3.3.4.1 | Re-apply pam-auth-update after nullok removal"
+      ansible.builtin.command:
+        cmd: pam-auth-update --enable unix --force
+      when:
+        - not audit_only
+        - pam_nullok_check.stdout != ''
+        - pam_configs_nullok.stdout_lines is defined
+        - pam_configs_nullok.stdout_lines | length > 0
+      changed_when: true
+      tags: [remediate, pam, password, cis_5.3.3.4.1]
+
+    - name: "REMEDIATE | 5.3.3.4.1 | Remove nullok directly from pam.d if no pam-configs source"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '\bnullok\b\s*'
+        replace: ""
+      loop:
+        - /etc/pam.d/common-auth
+        - /etc/pam.d/common-account
+        - /etc/pam.d/common-password
+        - /etc/pam.d/common-session
+        - /etc/pam.d/common-session-noninteractive
+      when:
+        - not audit_only
+        - pam_nullok_check.stdout != ''
+        - pam_configs_nullok.stdout_lines is defined
+        - pam_configs_nullok.stdout_lines | length == 0
+      tags: [remediate, pam, password, cis_5.3.3.4.1]
+
+    # =========================================================================
+    # SECTION 5.4.2 — Local User Accounts
+    # =========================================================================
+
+    # ── 5.4.2.2 — root is the only GID 0 account ─────────────────────────────
+
+    - name: "AUDIT | 5.4.2.2 | Find all accounts with GID 0 (excluding sync/shutdown/halt/operator)"
+      ansible.builtin.shell: |
+        awk -F: '($1 !~ /^(sync|shutdown|halt|operator)$/ && $4=="0") {print $1":"$4}' /etc/passwd
+      register: gid0_check
+      changed_when: false
+      tags: [audit, accounts, cis_5.4.2.2]
+
+    - name: "AUDIT | 5.4.2.2 | Report GID 0 accounts"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.4.2.2 (root only GID 0) —
+          {% if gid0_check.stdout | trim == 'root:0' %}PASS: Only root has GID 0
+          {% else %}FAIL: Non-root account(s) with GID 0 found:
+          {{ gid0_check.stdout }}{% endif %}
+      tags: [audit, accounts, cis_5.4.2.2]
+
+    - name: "REMEDIATE | 5.4.2.2 | Ensure root GID is 0"
+      ansible.builtin.command:
+        cmd: usermod -g 0 root
+      when:
+        - not audit_only
+        - "'root:0' not in gid0_check.stdout"
+      changed_when: true
+      tags: [remediate, accounts, cis_5.4.2.2]
+
+    - name: "REMEDIATE | 5.4.2.2 | Alert on non-root accounts with GID 0"
+      ansible.builtin.debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════════╗
+          ║  CIS 5.4.2.2 — MANUAL ACTION REQUIRED                          ║
+          ║  The following non-root account(s) have GID 0:                 ║
+          ║  {{ gid0_check.stdout_lines | reject('equalto','root:0') | join(', ') }}
+          ║  Review each account and reassign GID or remove as appropriate: ║
+          ║    usermod -g <new_gid> <user>                                  ║
+          ╚══════════════════════════════════════════════════════════════════╝
+      when:
+        - gid0_check.stdout_lines | reject('equalto', 'root:0') | list | length > 0
+      tags: [remediate, accounts, cis_5.4.2.2]
+
+    # ── 5.4.2.4 — root account access controlled ─────────────────────────────
+
+    - name: "AUDIT | 5.4.2.4 | Check root password status (P=set, L=locked)"
+      ansible.builtin.shell: |
+        passwd -S root | awk '$2 ~ /^(P|L)/ {print "status:" $2}'
+      register: root_passwd_status
+      changed_when: false
+      tags: [audit, accounts, cis_5.4.2.4]
+
+    - name: "AUDIT | 5.4.2.4 | Report root account access status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.4.2.4 (root account access) —
+          {% if 'status:P' in root_passwd_status.stdout or 'status:L' in root_passwd_status.stdout %}
+          PASS: root password {{ 'is set (P)' if 'status:P' in root_passwd_status.stdout else 'is locked (L)' }}
+          {% else %}FAIL: root account has no password set and is not locked{% endif %}
+      tags: [audit, accounts, cis_5.4.2.4]
+
+    - name: "REMEDIATE | 5.4.2.4 | Lock root account if not set or locked"
+      ansible.builtin.command:
+        cmd: usermod -L root
+      when:
+        - not audit_only
+        - "'status:P' not in root_passwd_status.stdout"
+        - "'status:L' not in root_passwd_status.stdout"
+      changed_when: true
+      tags: [remediate, accounts, cis_5.4.2.4]
+
+    # ── 5.4.2.7 — system accounts must use nologin shell ─────────────────────
+
+    - name: "AUDIT | 5.4.2.7 | Find system accounts with a valid login shell"
+      ansible.builtin.shell: |
+        l_valid_shells="^($(awk -F\/ '$NF != "nologin" {print}' /etc/shells \
+          | sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        uid_min=$(awk '/^\s*UID_MIN/{print $2}' /etc/login.defs)
+        awk -v pat="$l_valid_shells" -v uid_min="$uid_min" -F: \
+          '($1 !~ /^(root|halt|sync|shutdown|nfsnobody)$/ && ($3 < uid_min || $3 == 65534) && $NF ~ pat) \
+           {print $1}' /etc/passwd
+      register: sysacct_shell_check
+      changed_when: false
+      tags: [audit, accounts, cis_5.4.2.7]
+
+    - name: "AUDIT | 5.4.2.7 | Report system accounts with valid shell"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.4.2.7 (system accounts nologin) —
+          {% if sysacct_shell_check.stdout == '' %}PASS: No system accounts with a valid login shell
+          {% else %}FAIL: System account(s) with valid shell found:
+          {{ sysacct_shell_check.stdout_lines | join(', ') }}{% endif %}
+      tags: [audit, accounts, cis_5.4.2.7]
+
+    - name: "REMEDIATE | 5.4.2.7 | Set shell to nologin for flagged system accounts"
+      ansible.builtin.user:
+        name: "{{ item }}"
+        shell: "{{ nologin_path.stdout }}"
+      loop: "{{ sysacct_shell_check.stdout_lines }}"
+      when:
+        - not audit_only
+        - sysacct_shell_check.stdout != ''
+      vars:
+        nologin_path: "{{ lookup('pipe', 'command -v nologin') }}"
+      tags: [remediate, accounts, cis_5.4.2.7]
+
+    # ── 5.4.2.8 — accounts without valid login shell must be locked ───────────
+
+    - name: "AUDIT | 5.4.2.8 | Find non-root nologin accounts that are not locked"
+      ansible.builtin.shell: |
+        l_valid_shells="^($(awk -F\/ '$NF != "nologin" {print}' /etc/shells \
+          | sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        while IFS= read -r l_user; do
+          passwd -S "$l_user" | awk '$2 !~ /^L/ {print $1}'
+        done < <(awk -v pat="$l_valid_shells" -F: \
+          '($1 != "root" && $NF !~ pat) {print $1}' /etc/passwd)
+      register: unlocked_nologin_check
+      changed_when: false
+      tags: [audit, accounts, cis_5.4.2.8]
+
+    - name: "AUDIT | 5.4.2.8 | Report unlocked nologin accounts"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 5.4.2.8 (lock nologin accounts) —
+          {% if unlocked_nologin_check.stdout == '' %}PASS: All nologin accounts are locked
+          {% else %}FAIL: Unlocked nologin account(s) found:
+          {{ unlocked_nologin_check.stdout_lines | join(', ') }}{% endif %}
+      tags: [audit, accounts, cis_5.4.2.8]
+
+    - name: "REMEDIATE | 5.4.2.8 | Lock unlocked nologin accounts"
+      ansible.builtin.user:
+        name: "{{ item }}"
+        password_lock: true
+      loop: "{{ unlocked_nologin_check.stdout_lines }}"
+      when:
+        - not audit_only
+        - unlocked_nologin_check.stdout != ''
+      tags: [remediate, accounts, cis_5.4.2.8]
+
+    - name: "VERIFY | 5.4.2.8 | Confirm all nologin accounts are now locked"
+      ansible.builtin.shell: |
+        l_valid_shells="^($(awk -F\/ '$NF != "nologin" {print}' /etc/shells \
+          | sed -rn '/^\//{ s,/,\\/,g; p }' | paste -s -d '|' - ))$"
+        while IFS= read -r l_user; do
+          passwd -S "$l_user" | awk '$2 !~ /^L/ {print $1}'
+        done < <(awk -v pat="$l_valid_shells" -F: \
+          '($1 != "root" && $NF !~ pat) {print $1}' /etc/passwd)
+      register: verify_locked
+      changed_when: false
+      when:
+        - not audit_only
+        - unlocked_nologin_check.stdout != ''
+      tags: [remediate, accounts, cis_5.4.2.8]
+
+    - name: "VERIFY | 5.4.2.8 | Assert all nologin accounts are locked"
+      ansible.builtin.assert:
+        that: verify_locked.stdout == ''
+        success_msg: "PASS — All nologin accounts are now locked"
+        fail_msg: "FAIL — Some nologin accounts could not be locked: {{ verify_locked.stdout }}"
+      when:
+        - not audit_only
+        - unlocked_nologin_check.stdout != ''
+      tags: [remediate, accounts, cis_5.4.2.8]
+
+    # =========================================================================
+    # SECTION 6.1.1.1 — Logging: systemd-journald
+    # =========================================================================
+
+    # ── 6.1.1.1.1 — journald service active ──────────────────────────────────
+
+    - name: "AUDIT | 6.1.1.1.1 | Check systemd-journald.service is active"
+      ansible.builtin.command:
+        cmd: systemctl is-active systemd-journald.service
+      register: journald_active
+      changed_when: false
+      failed_when: false
+      tags: [audit, logging, cis_6.1.1.1.1]
+
+    - name: "AUDIT | 6.1.1.1.1 | Report journald service status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 6.1.1.1.1 (journald service) —
+          {% if journald_active.stdout == 'active' %}PASS: systemd-journald.service is active
+          {% else %}FAIL: systemd-journald.service is {{ journald_active.stdout | default('unknown') }}{% endif %}
+      tags: [audit, logging, cis_6.1.1.1.1]
+
+    - name: "REMEDIATE | 6.1.1.1.1 | Unmask systemd-journald.service"
+      ansible.builtin.systemd:
+        name: systemd-journald.service
+        masked: false
+      when:
+        - not audit_only
+        - journald_active.stdout != 'active'
+      tags: [remediate, logging, cis_6.1.1.1.1]
+
+    - name: "REMEDIATE | 6.1.1.1.1 | Enable and start systemd-journald.service"
+      ansible.builtin.systemd:
+        name: systemd-journald.service
+        enabled: true
+        state: started
+      when:
+        - not audit_only
+        - journald_active.stdout != 'active'
+      tags: [remediate, logging, cis_6.1.1.1.1]
+
+    - name: "VERIFY | 6.1.1.1.1 | Assert journald is active"
+      ansible.builtin.command:
+        cmd: systemctl is-active systemd-journald.service
+      register: journald_post
+      changed_when: false
+      when:
+        - not audit_only
+        - journald_active.stdout != 'active'
+      tags: [remediate, logging, cis_6.1.1.1.1]
+
+    - name: "VERIFY | 6.1.1.1.1 | Assert result"
+      ansible.builtin.assert:
+        that: journald_post.stdout == 'active'
+        success_msg: "PASS — systemd-journald.service is now active"
+        fail_msg: "FAIL — systemd-journald.service could not be started"
+      when:
+        - not audit_only
+        - journald_active.stdout != 'active'
+      tags: [remediate, logging, cis_6.1.1.1.1]
+
+    # ── journald storage limits (retention / size configuration) ─────────────
+
+    - name: "AUDIT | 6.1.1.x | Check journald storage configuration"
+      ansible.builtin.shell: |
+        journalctl --disk-usage 2>/dev/null || echo "(disk-usage unavailable)"
+        systemctl cat systemd-journald.service 2>/dev/null | grep -E 'SystemMaxUse|SystemKeepFree|RuntimeMaxUse|MaxFileSec' || true
+        find /etc/systemd/journald.conf /etc/systemd/journald.conf.d/ \
+          -name '*.conf' -exec grep -H -E 'SystemMaxUse|SystemKeepFree|RuntimeMaxUse|MaxFileSec' {} \; 2>/dev/null || true
+      register: journald_config_check
+      changed_when: false
+      tags: [audit, logging]
+
+    - name: "AUDIT | 6.1.1.x | Report journald storage settings"
+      ansible.builtin.debug:
+        msg: |
+          ── JOURNALD STORAGE CONFIGURATION ───────────────────────────────
+          {{ journald_config_check.stdout | default('(no output)') }}
+          ─────────────────────────────────────────────────────────────────
+          Review values against site policy. Defaults applied by remediation:
+            SystemMaxUse    = {{ journald_system_max_use }}
+            SystemKeepFree  = {{ journald_keep_free }}
+            RuntimeMaxUse   = {{ journald_runtime_max_use }}
+            RuntimeKeepFree = {{ journald_runtime_keep_free }}
+            MaxFileSec      = {{ journald_max_file_sec }}
+      tags: [audit, logging]
+
+    - name: "REMEDIATE | 6.1.1.x | Ensure journald.conf.d directory exists"
+      ansible.builtin.file:
+        path: "{{ journald_conf_d }}"
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+      when: not audit_only
+      tags: [remediate, logging]
+
+    - name: "REMEDIATE | 6.1.1.x | Apply journald storage limits drop-in"
+      ansible.builtin.copy:
+        dest: "{{ journald_conf_d }}/50-cis-storage.conf"
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          # CIS Benchmark — journald storage limits
+          # Adjust values to match site policy before applying.
+          [Journal]
+          SystemMaxUse={{ journald_system_max_use }}
+          SystemKeepFree={{ journald_keep_free }}
+          RuntimeMaxUse={{ journald_runtime_max_use }}
+          RuntimeKeepFree={{ journald_runtime_keep_free }}
+          MaxFileSec={{ journald_max_file_sec }}
+      when: not audit_only
+      notify: Restart journald
+      tags: [remediate, logging]
+
+    # =========================================================================
+    # SECTION 6.1.1.1 — journald Directives (ForwardToSyslog / Storage / Compress)
+    # =========================================================================
+
+    - name: "AUDIT | 6.1.1.1.4/5/6 | Collect effective journald configuration"
+      ansible.builtin.shell: |
+        systemd-analyze cat-config systemd/journald.conf 2>/dev/null \
+          | grep -Ei '^\s*(ForwardToSyslog|Storage|Compress)\s*=' || echo "DEFAULTS_ONLY"
+      register: journald_directives_check
+      changed_when: false
+      tags: [audit, logging, cis_6.1.1.1.4, cis_6.1.1.1.5, cis_6.1.1.1.6]
+
+    - name: "AUDIT | 6.1.1.1.4 | Report ForwardToSyslog"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 6.1.1.1.4 (ForwardToSyslog) — logging_backend={{ logging_backend }}
+          {% set val = journald_directives_check.stdout | regex_search('ForwardToSyslog\s*=\s*(\S+)', '\\1') %}
+          {% if logging_backend == 'journald' %}
+            Expected: no —
+            {% if val and val[0] | lower == 'no' %}PASS: ForwardToSyslog=no
+            {% elif not val %}PASS: defaults to no (not explicitly set)
+            {% else %}FAIL: ForwardToSyslog={{ val[0] }} — should be no{% endif %}
+          {% else %}
+            Expected: yes —
+            {% if val and val[0] | lower == 'yes' %}PASS: ForwardToSyslog=yes
+            {% else %}FAIL: ForwardToSyslog not set to yes{% endif %}
+          {% endif %}
+      tags: [audit, logging, cis_6.1.1.1.4]
+
+    - name: "AUDIT | 6.1.1.1.5 | Report Storage"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 6.1.1.1.5 (Storage) —
+          {% set val = journald_directives_check.stdout | regex_search('Storage\s*=\s*(\S+)', '\\1') %}
+          {% if val and val[0] | lower == 'persistent' %}PASS: Storage=persistent
+          {% elif not val %}FAIL: Storage not set (defaults to auto — should be persistent)
+          {% else %}FAIL: Storage={{ val[0] }} — expected persistent{% endif %}
+      tags: [audit, logging, cis_6.1.1.1.5]
+
+    - name: "AUDIT | 6.1.1.1.6 | Report Compress"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 6.1.1.1.6 (Compress) —
+          {% set val = journald_directives_check.stdout | regex_search('Compress\s*=\s*(\S+)', '\\1') %}
+          {% if val and val[0] | lower == 'yes' %}PASS: Compress=yes
+          {% elif not val %}PASS: defaults to yes (not explicitly set)
+          {% else %}FAIL: Compress={{ val[0] }} — expected yes{% endif %}
+      tags: [audit, logging, cis_6.1.1.1.6]
+
+    - name: "REMEDIATE | 6.1.1.1.4/5/6 | Apply journald directive drop-in"
+      ansible.builtin.blockinfile:
+        path: "{{ journald_conf_d }}/60-cis-journald.conf"
+        create: true
+        owner: root
+        group: root
+        mode: "0644"
+        marker: "# {mark} CIS journald directives 6.1.1.1.4/5/6"
+        block: |
+          [Journal]
+          ForwardToSyslog={{ 'yes' if logging_backend == 'rsyslog' else 'no' }}
+          Storage=persistent
+          Compress=yes
+      when: not audit_only
+      notify: Restart journald
+      tags: [remediate, logging, cis_6.1.1.1.4, cis_6.1.1.1.5, cis_6.1.1.1.6]
+
+    # =========================================================================
+    # SECTION 6.1.2 — rsyslog (conditional on logging_backend)
+    # =========================================================================
+
+    - name: "AUDIT | 6.1.2.2 | Check rsyslog.service enabled and active"
+      ansible.builtin.shell: |
+        echo "enabled:$(systemctl is-enabled rsyslog.service 2>/dev/null || echo 'not-found')"
+        echo "active:$(systemctl is-active rsyslog.service 2>/dev/null || echo 'inactive')"
+      register: rsyslog_status
+      changed_when: false
+      tags: [audit, logging, rsyslog, cis_6.1.2.2]
+
+    - name: "AUDIT | 6.1.2.2 | Report rsyslog service status"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 6.1.2.2 (rsyslog service) — logging_backend={{ logging_backend }}
+          {% if logging_backend != 'rsyslog' %}
+          N/A: rsyslog is not the selected logging_backend — skipping
+          {% elif 'enabled:enabled' in rsyslog_status.stdout and 'active:active' in rsyslog_status.stdout %}
+          PASS: rsyslog.service is enabled and active
+          {% else %}
+          FAIL: {{ rsyslog_status.stdout | trim }}{% endif %}
+      tags: [audit, logging, rsyslog, cis_6.1.2.2]
+
+    - name: "REMEDIATE | 6.1.2.2 | Unmask rsyslog.service"
+      ansible.builtin.systemd:
+        name: rsyslog.service
+        masked: false
+      when:
+        - not audit_only
+        - logging_backend == 'rsyslog'
+      tags: [remediate, logging, rsyslog, cis_6.1.2.2]
+
+    - name: "REMEDIATE | 6.1.2.2 | Enable and start rsyslog.service"
+      ansible.builtin.systemd:
+        name: rsyslog.service
+        enabled: true
+        state: started
+      when:
+        - not audit_only
+        - logging_backend == 'rsyslog'
+        - "'active:active' not in rsyslog_status.stdout or 'enabled:enabled' not in rsyslog_status.stdout"
+      tags: [remediate, logging, rsyslog, cis_6.1.2.2]
+
+    - name: "AUDIT | 6.1.2.3 | Verify journald ForwardToSyslog=yes for rsyslog backend"
+      ansible.builtin.shell: |
+        systemd-analyze cat-config systemd/journald.conf 2>/dev/null \
+          | grep -i 'ForwardToSyslog' || echo "NOT_SET"
+      register: forward_to_syslog_check
+      changed_when: false
+      when: logging_backend == 'rsyslog'
+      tags: [audit, logging, rsyslog, cis_6.1.2.3]
+
+    - name: "AUDIT | 6.1.2.3 | Report ForwardToSyslog for rsyslog"
+      ansible.builtin.debug:
+        msg: >-
+          CIS 6.1.2.3 (journald → rsyslog forwarding) —
+          {% if 'ForwardToSyslog=yes' in forward_to_syslog_check.stdout | default('') %}
+          PASS: ForwardToSyslog=yes is set
+          {% else %}
+          FAIL: ForwardToSyslog not set to yes — journald will not forward to rsyslog{% endif %}
+      when: logging_backend == 'rsyslog'
+      tags: [audit, logging, rsyslog, cis_6.1.2.3]
+
+    - name: "AUDIT | 6.1.2.3 | Verify journald and rsyslog both running"
+      ansible.builtin.shell: |
+        systemctl list-units --type service 2>/dev/null \
+          | grep -P '(journald|rsyslog)' || true
+      register: log_services_running
+      changed_when: false
+      when: logging_backend == 'rsyslog'
+      tags: [audit, logging, rsyslog, cis_6.1.2.3]
+
+    - name: "AUDIT | 6.1.2.3 | Report log services status"
+      ansible.builtin.debug:
+        msg: |
+          ── CIS 6.1.2.3 LOGGING SERVICES ─────────────────────────────────
+          {{ log_services_running.stdout | default('(no output)') }}
+          ─────────────────────────────────────────────────────────────────
+      when: logging_backend == 'rsyslog'
+      tags: [audit, logging, rsyslog, cis_6.1.2.3]
+
+    # =========================================================================
+    # SECTION 7.1 — Critical File Permissions
+    # =========================================================================
+
+    - name: "AUDIT | 7.1.1-7.1.9 | Collect stat on critical system files"
+      ansible.builtin.stat:
+        path: "{{ item.path }}"
+        follow: true
+      loop:
+        # mode | expected_owner | expected_group(s) | cis
+        - {
+            path: "/etc/passwd",
+            mode: "0644",
+            owner: "root",
+            group: ["root"],
+            cis: "7.1.1",
+          }
+        - {
+            path: "/etc/passwd-",
+            mode: "0644",
+            owner: "root",
+            group: ["root"],
+            cis: "7.1.2",
+          }
+        - {
+            path: "/etc/group",
+            mode: "0644",
+            owner: "root",
+            group: ["root"],
+            cis: "7.1.3",
+          }
+        - {
+            path: "/etc/group-",
+            mode: "0644",
+            owner: "root",
+            group: ["root"],
+            cis: "7.1.4",
+          }
+        - {
+            path: "/etc/shadow",
+            mode: "0640",
+            owner: "root",
+            group: ["root", "shadow"],
+            cis: "7.1.5",
+          }
+        - {
+            path: "/etc/shadow-",
+            mode: "0640",
+            owner: "root",
+            group: ["root", "shadow"],
+            cis: "7.1.6",
+          }
+        - {
+            path: "/etc/gshadow",
+            mode: "0640",
+            owner: "root",
+            group: ["root", "shadow"],
+            cis: "7.1.7",
+          }
+        - {
+            path: "/etc/gshadow-",
+            mode: "0640",
+            owner: "root",
+            group: ["root", "shadow"],
+            cis: "7.1.8",
+          }
+        - {
+            path: "/etc/shells",
+            mode: "0644",
+            owner: "root",
+            group: ["root"],
+            cis: "7.1.9",
+          }
+      loop_control:
+        label: "{{ item.cis }} {{ item.path }}"
+      register: critical_file_stats
+      tags:
+        [
+          audit,
+          fileperms,
+          cis_7.1.1,
+          cis_7.1.2,
+          cis_7.1.3,
+          cis_7.1.4,
+          cis_7.1.5,
+          cis_7.1.6,
+          cis_7.1.7,
+          cis_7.1.8,
+          cis_7.1.9,
+        ]
+
+    - name: "AUDIT | 7.1.1-7.1.9 | Report file permission compliance"
+      ansible.builtin.debug:
+        msg: >-
+          CIS {{ item.item.cis }} ({{ item.item.path }}) —
+          {% if not item.stat.exists %}
+          N/A: file does not exist
+          {% else %}
+          Mode={{ item.stat.mode }} Owner={{ item.stat.pw_name }} Group={{ item.stat.gr_name }} —
+          {% set mode_ok   = item.stat.mode == item.item.mode %}
+          {% set owner_ok  = item.stat.pw_name == item.item.owner %}
+          {% set group_ok  = item.stat.gr_name in item.item.group %}
+          {% if mode_ok and owner_ok and group_ok %}PASS{% else %}FAIL:
+            {% if not mode_ok %}mode should be {{ item.item.mode }}; {% endif %}
+            {% if not owner_ok %}owner should be {{ item.item.owner }}; {% endif %}
+            {% if not group_ok %}group should be one of {{ item.item.group | join('/') }}{% endif %}
+          {% endif %}
+          {% endif %}
+      loop: "{{ critical_file_stats.results }}"
+      loop_control:
+        label: "{{ item.item.cis }} {{ item.item.path }}"
+      tags:
+        [
+          audit,
+          fileperms,
+          cis_7.1.1,
+          cis_7.1.2,
+          cis_7.1.3,
+          cis_7.1.4,
+          cis_7.1.5,
+          cis_7.1.6,
+          cis_7.1.7,
+          cis_7.1.8,
+          cis_7.1.9,
+        ]
+
+    - name: "REMEDIATE | 7.1.1-7.1.4 / 7.1.9 | Fix permissions on 0644 files (root:root)"
+      ansible.builtin.file:
+        path: "{{ item.item.path }}"
+        owner: root
+        group: root
+        mode: "0644"
+      loop: "{{ critical_file_stats.results }}"
+      loop_control:
+        label: "{{ item.item.cis }} {{ item.item.path }}"
+      when:
+        - not audit_only
+        - item.stat.exists
+        - item.item.mode == '0644'
+        - item.stat.mode != '0644' or item.stat.pw_name != 'root' or item.stat.gr_name != 'root'
+      tags:
+        [
+          remediate,
+          fileperms,
+          cis_7.1.1,
+          cis_7.1.2,
+          cis_7.1.3,
+          cis_7.1.4,
+          cis_7.1.9,
+        ]
+
+    - name: "REMEDIATE | 7.1.5-7.1.8 | Fix ownership on 0640 shadow/gshadow files"
+      ansible.builtin.file:
+        path: "{{ item.item.path }}"
+        owner: root
+        group: shadow
+        mode: "0640"
+      loop: "{{ critical_file_stats.results }}"
+      loop_control:
+        label: "{{ item.item.cis }} {{ item.item.path }}"
+      when:
+        - not audit_only
+        - item.stat.exists
+        - item.item.mode == '0640'
+        - item.stat.mode != '0640' or item.stat.pw_name != 'root' or item.stat.gr_name not in ['root','shadow']
+      tags: [remediate, fileperms, cis_7.1.5, cis_7.1.6, cis_7.1.7, cis_7.1.8]
+
+    - name: "VERIFY | 7.1.1-7.1.9 | Re-check file permissions after remediation"
+      ansible.builtin.stat:
+        path: "{{ item.item.path }}"
+        follow: true
+      loop: "{{ critical_file_stats.results }}"
+      loop_control:
+        label: "{{ item.item.cis }} {{ item.item.path }}"
+      register: critical_file_post
+      when:
+        - not audit_only
+        - item.stat.exists
+        - item.stat.mode != item.item.mode or
+          item.stat.pw_name != item.item.owner or
+          item.stat.gr_name not in item.item.group
+      tags: [remediate, fileperms]
+
+    - name: "VERIFY | 7.1.1-7.1.9 | Assert final permissions"
+      ansible.builtin.assert:
+        that:
+          - item.stat.pw_name == 'root'
+          - item.stat.gr_name in ['root', 'shadow']
+          - item.stat.mode in [item.item.item.mode, '0600', '0400']
+        success_msg: "PASS — {{ item.item.item.path }} permissions are correct"
+        fail_msg: "FAIL — {{ item.item.item.path }} still has incorrect permissions after remediation"
+      loop: "{{ critical_file_post.results | default([]) }}"
+      loop_control:
+        label: "{{ item.item.item.cis }} {{ item.item.item.path }}"
+      when:
+        - not audit_only
+        - item.stat is defined
+        - item.stat.exists
+      tags: [remediate, fileperms]
+
+  # ===========================================================================
+  handlers:
+    - name: Remount /tmp
+      ansible.builtin.command:
+        cmd: mount -o remount /tmp
+      changed_when: true
+      listen: "Remount /tmp"
+
+    - name: Reload sshd
+      ansible.builtin.systemd:
+        name: sshd
+        state: reloaded
+      listen: "Reload sshd"
+
+    - name: Restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald.service
+        state: restarted
+      listen: "Restart journald"
+
+    - name: Update GRUB
+      ansible.builtin.command:
+        cmd: update-grub
+      changed_when: true
+      listen: "Update GRUB"
+      notify: Reboot required notice
+
+    - name: Reboot required notice
+      ansible.builtin.debug:
+        msg: |
+          ⚠  GRUB configuration updated.
+          A reboot is required for AppArmor GRUB changes to take effect.
+          Schedule a maintenance window and run: reboot
+      listen: "Reboot required notice"

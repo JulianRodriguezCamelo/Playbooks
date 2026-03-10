@@ -28,7 +28,6 @@
     grub_conf_efi: "/boot/efi/EFI"
 
   tasks:
-
     - name: "AUDIT | 1.2.1 | Obtener lista de repositorios activos"
       ansible.builtin.command: yum repolist
       register: cis_1_2_1_repos
@@ -56,14 +55,13 @@
 
     - name: "REMEDIATION | 1.2.1 | Limpiar caché de yum"
       ansible.builtin.command: yum clean all
-      changed_when: true
+      changed_when: false
       tags: ["remediation", "1.2.1"]
 
-
-# =============================================================================
-# 1.2.3 — Ensure GPG keys are configured (Manual)
-# CIS Controls v7: 3.4, 3.5
-# =============================================================================
+    # =============================================================================
+    # 1.2.3 — Ensure GPG keys are configured (Manual)
+    # CIS Controls v7: 3.4, 3.5
+    # =============================================================================
 
     - name: "AUDIT | 1.2.3 | Listar llaves GPG instaladas"
       ansible.builtin.command: >
@@ -88,11 +86,10 @@
         msg: "{{ cis_1_2_3_gpg.stdout_lines }}"
       tags: ["audit", "1.2.3"]
 
-
-# =============================================================================
-# 1.4.1 — Ensure permissions on bootloader config are configured (Automated)
-# CIS Controls v7: 5.1
-# =============================================================================
+    # =============================================================================
+    # 1.4.1 — Ensure permissions on bootloader config are configured (Automated)
+    # CIS Controls v7: 5.1
+    # =============================================================================
 
     - name: "AUDIT | 1.4.1 | Detectar ruta del bootloader (EFI o legacy)"
       ansible.builtin.find:
@@ -133,20 +130,19 @@
         path: "{{ grub_conf_path }}"
         owner: root
         group: root
-      when: cis_1_4_1_stat.stat.exists
+      when: cis_1_4_1_stat.stat.exists | default(False)
       tags: ["remediation", "1.4.1"]
 
     - name: "REMEDIATION | 1.4.1 | Establecer permisos 0600 en grub.conf"
       ansible.builtin.file:
         path: "{{ grub_conf_path }}"
         mode: "0600"
-      when: cis_1_4_1_stat.stat.exists
+      when: cis_1_4_1_stat.stat.exists | default(False)
       tags: ["remediation", "1.4.1"]
 
-
-# =============================================================================
-# 1.4.3 — Ensure authentication required for single user mode (Automated)
-# =============================================================================
+    # =============================================================================
+    # 1.4.3 — Ensure authentication required for single user mode (Automated)
+    # =============================================================================
 
     - name: "AUDIT | 1.4.3 | Verificar contraseña configurada para modo usuario único"
       ansible.builtin.shell: |
@@ -173,11 +169,10 @@
         mode: "0644"
       tags: ["remediation", "1.4.3"]
 
-
-# =============================================================================
-# 1.5.1 — Ensure core dumps are restricted (Automated)
-# CIS Controls v7: 5.1
-# =============================================================================
+    # =============================================================================
+    # 1.5.1 — Ensure core dumps are restricted (Automated)
+    # CIS Controls v7: 5.1
+    # =============================================================================
 
     - name: "AUDIT | 1.5.1 | Verificar límite hard de core dumps en limits.conf"
       ansible.builtin.shell: |
@@ -223,11 +218,10 @@
         reload: true
       tags: ["remediation", "1.5.1"]
 
-
-# =============================================================================
-# 1.5.3 — Ensure ASLR is enabled (Automated)
-# CIS Controls v7: 8.3
-# =============================================================================
+    # =============================================================================
+    # 1.5.3 — Ensure ASLR is enabled (Automated)
+    # CIS Controls v7: 8.3
+    # =============================================================================
 
     - name: "AUDIT | 1.5.3 | Verificar kernel.randomize_va_space = 2"
       ansible.builtin.command: sysctl kernel.randomize_va_space
@@ -280,11 +274,10 @@
         - /etc/sysctl.d/*.conf
       tags: ["remediation", "1.5.3"]
 
-
-# =============================================================================
-# 1.5.4 — Ensure prelink is disabled (Automated)
-# CIS Controls v7: 14.9
-# =============================================================================
+    # =============================================================================
+    # 1.5.4 — Ensure prelink is disabled (Automated)
+    # CIS Controls v7: 14.9
+    # =============================================================================
 
     - name: "AUDIT | 1.5.4 | Verificar si prelink está instalado"
       ansible.builtin.command: rpm -q prelink
@@ -314,11 +307,10 @@
         state: absent
       tags: ["remediation", "1.5.4"]
 
-
-# =============================================================================
-# 1.7.1 — Ensure message of the day is configured properly (Automated)
-# CIS Controls v7: 5.1
-# =============================================================================
+    # =============================================================================
+    # 1.7.1 — Ensure message of the day is configured properly (Automated)
+    # CIS Controls v7: 5.1
+    # =============================================================================
 
     - name: "AUDIT | 1.7.1 | Leer contenido actual de /etc/motd"
       ansible.builtin.command: cat /etc/motd
@@ -360,11 +352,10 @@
           ********************************************************************
       tags: ["remediation", "1.7.1"]
 
-
-# =============================================================================
-# 1.7.6 — Ensure permissions on /etc/issue.net are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
+    # =============================================================================
+    # 1.7.6 — Ensure permissions on /etc/issue.net are configured (Automated)
+    # CIS Controls v7: 14.6
+    # =============================================================================
 
     - name: "AUDIT | 1.7.6 | Verificar permisos de /etc/issue.net"
       ansible.builtin.stat:
@@ -399,11 +390,10 @@
       when: cis_1_7_6_stat.stat.exists
       tags: ["remediation", "1.7.6"]
 
-
-# =============================================================================
-# 3.2.1 — Ensure IP forwarding is disabled (Automated)
-# CIS Controls v7: 9.2
-# =============================================================================
+    # =============================================================================
+    # 3.2.1 — Ensure IP forwarding is disabled (Automated)
+    # CIS Controls v7: 9.2
+    # =============================================================================
 
     - name: "AUDIT | 3.2.1 | Verificar net.ipv4.ip_forward = 0"
       ansible.builtin.command: sysctl net.ipv4.ip_forward
@@ -451,14 +441,18 @@
 
     - name: "REMEDIATION | 3.2.1 | Comentar overrides de ipv4.ip_forward en sysctl files"
       ansible.builtin.shell: |
-        grep -Els '^\s*net\.ipv4\.ip_forward\s*=\s*1' \
-          /etc/sysctl.conf /etc/sysctl.d/*.conf /usr/lib/sysctl.d/*.conf /run/sysctl.d/*.conf \
-          2>/dev/null | while read f; do
+        files=$(grep -Els '^\s*net\.ipv4\.ip_forward\s*=\s*1' \
+          /etc/sysctl.conf /etc/sysctl.d/*.conf /usr/lib/sysctl.d/*.conf /run/sysctl.d/*.conf 2>/dev/null)
+        if [ -n "$files" ]; then
+          echo "$files" | while read f; do
             sed -ri 's/^\s*(net\.ipv4\.ip_forward\s*)(=)(\s*\S+\b).*$/# *REMOVED* \1/' "$f"
           done
-        sysctl -w net.ipv4.ip_forward=0
-        sysctl -w net.ipv4.route.flush=1
-      changed_when: true
+          sysctl -w net.ipv4.ip_forward=0
+          sysctl -w net.ipv4.route.flush=1
+          echo "CHANGED"
+        fi
+      register: cis_3_2_1_ipv4_comment
+      changed_when: "'CHANGED' in cis_3_2_1_ipv4_comment.stdout"
       tags: ["remediation", "3.2.1"]
 
     - name: "REMEDIATION | 3.2.1 | Deshabilitar net.ipv6.conf.all.forwarding (si IPv6 activo)"
@@ -473,22 +467,25 @@
 
     - name: "REMEDIATION | 3.2.1 | Comentar overrides de ipv6.forwarding en sysctl files"
       ansible.builtin.shell: |
-        grep -Els '^\s*net\.ipv6\.conf\.all\.forwarding\s*=\s*1' \
-          /etc/sysctl.conf /etc/sysctl.d/*.conf /usr/lib/sysctl.d/*.conf /run/sysctl.d/*.conf \
-          2>/dev/null | while read f; do
+        files=$(grep -Els '^\s*net\.ipv6\.conf\.all\.forwarding\s*=\s*1' \
+          /etc/sysctl.conf /etc/sysctl.d/*.conf /usr/lib/sysctl.d/*.conf /run/sysctl.d/*.conf 2>/dev/null)
+        if [ -n "$files" ]; then
+          echo "$files" | while read f; do
             sed -ri 's/^\s*(net\.ipv6\.conf\.all\.forwarding\s*)(=)(\s*\S+\b).*$/# *REMOVED* \1/' "$f"
           done
-        sysctl -w net.ipv6.conf.all.forwarding=0
-        sysctl -w net.ipv6.route.flush=1
+          sysctl -w net.ipv6.conf.all.forwarding=0
+          sysctl -w net.ipv6.route.flush=1
+          echo "CHANGED"
+        fi
+      register: cis_3_2_1_ipv6_comment
+      changed_when: "'CHANGED' in cis_3_2_1_ipv6_comment.stdout"
       when: cis_3_2_1_ipv6_fwd.rc == 0
-      changed_when: true
       tags: ["remediation", "3.2.1"]
 
-
-# =============================================================================
-# 3.3.1 — Ensure source routed packets are not accepted (Automated)
-# CIS Controls v7: 9.2
-# =============================================================================
+    # =============================================================================
+    # 3.3.1 — Ensure source routed packets are not accepted (Automated)
+    # CIS Controls v7: 9.2
+    # =============================================================================
 
     - name: "AUDIT | 3.3.1 | Verificar net.ipv4.conf.all.accept_source_route = 0"
       ansible.builtin.command: sysctl net.ipv4.conf.all.accept_source_route
@@ -550,7 +547,7 @@
 
     - name: "REMEDIATION | 3.3.1 | Flush de rutas IPv4"
       ansible.builtin.command: sysctl -w net.ipv4.route.flush=1
-      changed_when: true
+      changed_when: false
       tags: ["remediation", "3.3.1"]
 
     - name: "REMEDIATION | 3.3.1 | Deshabilitar accept_source_route IPv6 (all)"
@@ -576,14 +573,13 @@
     - name: "REMEDIATION | 3.3.1 | Flush de rutas IPv6"
       ansible.builtin.command: sysctl -w net.ipv6.route.flush=1
       when: cis_3_3_1_ipv6_all.rc == 0
-      changed_when: true
+      changed_when: false
       tags: ["remediation", "3.3.1"]
 
-
-# =============================================================================
-# 3.3.8 — Ensure TCP SYN Cookies is enabled (Automated)
-# CIS Controls v7: 9.2
-# =============================================================================
+    # =============================================================================
+    # 3.3.8 — Ensure TCP SYN Cookies is enabled (Automated)
+    # CIS Controls v7: 9.2
+    # =============================================================================
 
     - name: "AUDIT | 3.3.8 | Verificar net.ipv4.tcp_syncookies = 1 (runtime)"
       ansible.builtin.command: sysctl net.ipv4.tcp_syncookies
@@ -622,14 +618,13 @@
 
     - name: "REMEDIATION | 3.3.8 | Flush de rutas IPv4"
       ansible.builtin.command: sysctl -w net.ipv4.route.flush=1
-      changed_when: true
+      changed_when: false
       tags: ["remediation", "3.3.8"]
 
-
-# =============================================================================
-# 3.4.5 — Ensure permissions on /etc/hosts.deny are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
+    # =============================================================================
+    # 3.4.5 — Ensure permissions on /etc/hosts.deny are configured (Automated)
+    # CIS Controls v7: 14.6
+    # =============================================================================
 
     - name: "AUDIT | 3.4.5 | Verificar permisos de /etc/hosts.deny"
       ansible.builtin.stat:
@@ -664,11 +659,10 @@
       when: cis_3_4_5_stat.stat.exists
       tags: ["remediation", "3.4.5"]
 
-
-# =============================================================================
-# 5.1.1 — Ensure cron daemon is enabled (Automated)
-# CIS Controls v7: 6
-# =============================================================================
+    # =============================================================================
+    # 5.1.1 — Ensure cron daemon is enabled (Automated)
+    # CIS Controls v7: 6
+    # =============================================================================
 
     - name: "AUDIT | 5.1.1 | Verificar estado del servicio crond"
       ansible.builtin.service_facts:
@@ -692,11 +686,10 @@
         enabled: true
       tags: ["remediation", "5.1.1"]
 
-
-# =============================================================================
-# 5.1.2 — Ensure permissions on /etc/crontab are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
+    # =============================================================================
+    # 5.1.2 — Ensure permissions on /etc/crontab are configured (Automated)
+    # CIS Controls v7: 14.6
+    # =============================================================================
 
     - name: "AUDIT | 5.1.2 | Verificar permisos de /etc/crontab"
       ansible.builtin.stat:
@@ -721,21 +714,20 @@
         path: /etc/crontab
         owner: root
         group: root
-      when: cis_5_1_2_stat.stat.exists
+      when: cis_5_1_2_stat.stat.exists | default(False)
       tags: ["remediation", "5.1.2"]
 
     - name: "REMEDIATION | 5.1.2 | Establecer permisos 0600 en /etc/crontab"
       ansible.builtin.file:
         path: /etc/crontab
         mode: "0600"
-      when: cis_5_1_2_stat.stat.exists
+      when: cis_5_1_2_stat.stat.exists | default(False)
       tags: ["remediation", "5.1.2"]
 
-
-# =============================================================================
-# 5.2.1 — Ensure sudo is installed (Automated)
-# CIS Controls v7: 4
-# =============================================================================
+    # =============================================================================
+    # 5.2.1 — Ensure sudo is installed (Automated)
+    # CIS Controls v7: 4
+    # =============================================================================
 
     - name: "AUDIT | 5.2.1 | Verificar si sudo está instalado"
       ansible.builtin.command: rpm -q sudo
@@ -760,11 +752,10 @@
       when: cis_5_2_1_sudo.rc != 0
       tags: ["remediation", "5.2.1"]
 
-
-# =============================================================================
-# 5.3.1 — Ensure permissions on /etc/ssh/sshd_config are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
+    # =============================================================================
+    # 5.3.1 — Ensure permissions on /etc/ssh/sshd_config are configured (Automated)
+    # CIS Controls v7: 14.6
+    # =============================================================================
 
     - name: "AUDIT | 5.3.1 | Verificar permisos de /etc/ssh/sshd_config"
       ansible.builtin.stat:
@@ -792,11 +783,10 @@
         mode: "0600"
       tags: ["remediation", "5.3.1"]
 
-
-# =============================================================================
-# 5.3.3 — Ensure permissions on SSH public host key files are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
+    # =============================================================================
+    # 5.3.3 — Ensure permissions on SSH public host key files are configured (Automated)
+    # CIS Controls v7: 14.6
+    # =============================================================================
 
     - name: "AUDIT | 5.3.3 | Buscar llaves públicas SSH en /etc/ssh"
       ansible.builtin.find:
@@ -840,11 +830,10 @@
         label: "{{ item.path }}"
       tags: ["remediation", "5.3.3"]
 
-
-# =============================================================================
-# 5.3.8 — Ensure SSH MaxAuthTries is set to 4 or less (Automated)
-# CIS Controls v7: 16.13
-# =============================================================================
+    # =============================================================================
+    # 5.3.8 — Ensure SSH MaxAuthTries is set to 4 or less (Automated)
+    # CIS Controls v7: 16.13
+    # =============================================================================
 
     - name: "AUDIT | 5.3.8 | Verificar MaxAuthTries en configuración efectiva de sshd"
       ansible.builtin.shell: |
@@ -878,17 +867,16 @@
     - name: "REMEDIATION | 5.3.8 | Establecer MaxAuthTries 4 en sshd_config"
       ansible.builtin.lineinfile:
         path: /etc/ssh/sshd_config
-        regexp: '^\s*#?\s*MaxAuthTries'
+        regexp: '(?i)^\s*#?\s*MaxAuthTries'
         line: "MaxAuthTries 4"
         state: present
       notify: Restart sshd
       tags: ["remediation", "5.3.8"]
 
-
-# =============================================================================
-# 5.3.9 — Ensure SSH IgnoreRhosts is enabled (Automated)
-# CIS Controls v7: 9.2
-# =============================================================================
+    # =============================================================================
+    # 5.3.9 — Ensure SSH IgnoreRhosts is enabled (Automated)
+    # CIS Controls v7: 9.2
+    # =============================================================================
 
     - name: "AUDIT | 5.3.9 | Verificar IgnoreRhosts en configuración efectiva de sshd"
       ansible.builtin.shell: |
@@ -928,11 +916,10 @@
       notify: Restart sshd
       tags: ["remediation", "5.3.9"]
 
-
-# =============================================================================
-# 5.3.12 — Ensure SSH PermitEmptyPasswords is disabled (Automated)
-# CIS Controls v7: 16.3
-# =============================================================================
+    # =============================================================================
+    # 5.3.12 — Ensure SSH PermitEmptyPasswords is disabled (Automated)
+    # CIS Controls v7: 16.3
+    # =============================================================================
 
     - name: "AUDIT | 5.3.12 | Verificar PermitEmptyPasswords en configuración efectiva"
       ansible.builtin.shell: |
@@ -972,11 +959,10 @@
       notify: Restart sshd
       tags: ["remediation", "5.3.12"]
 
-
-# =============================================================================
-# 5.3.14 — Ensure only strong Ciphers are used (Automated)
-# CIS Controls v7: 14.4
-# =============================================================================
+    # =============================================================================
+    # 5.3.14 — Ensure only strong Ciphers are used (Automated)
+    # CIS Controls v7: 14.4
+    # =============================================================================
 
     - name: "AUDIT | 5.3.14 | Verificar ausencia de cifrados débiles en configuración efectiva"
       ansible.builtin.shell: |
@@ -1018,11 +1004,10 @@
       notify: Restart sshd
       tags: ["remediation", "5.3.14"]
 
-
-# =============================================================================
-# 5.4.1 — Ensure password creation requirements are configured (Automated)
-# CIS Controls v7: 4.4
-# =============================================================================
+    # =============================================================================
+    # 5.4.1 — Ensure password creation requirements are configured (Automated)
+    # CIS Controls v7: 4.4
+    # =============================================================================
 
     - name: "AUDIT | 5.4.1 | Verificar pam_cracklib en /etc/pam.d/password-auth"
       ansible.builtin.shell: |
@@ -1067,6 +1052,7 @@
       ansible.builtin.lineinfile:
         path: /etc/pam.d/password-auth
         regexp: '^\s*password\s+(requisite|required)\s+pam_cracklib\.so'
+        insertafter: "^password"
         line: "password requisite pam_cracklib.so try_first_pass retry=3 minlen=14 dcredit=-1 ucredit=-1 ocredit=-1 lcredit=-1"
         state: present
       tags: ["remediation", "5.4.1"]
@@ -1075,15 +1061,15 @@
       ansible.builtin.lineinfile:
         path: /etc/pam.d/system-auth
         regexp: '^\s*password\s+(requisite|required)\s+pam_cracklib\.so'
+        insertafter: "^password"
         line: "password requisite pam_cracklib.so try_first_pass retry=3 minlen=14 dcredit=-1 ucredit=-1 ocredit=-1 lcredit=-1"
         state: present
       tags: ["remediation", "5.4.1"]
 
-
-# =============================================================================
-# 5.5.5 — Ensure default user umask is configured (Automated)
-# CIS Controls v7: 5.1, 13
-# =============================================================================
+    # =============================================================================
+    # 5.5.5 — Ensure default user umask is configured (Automated)
+    # CIS Controls v7: 5.1, 13
+    # =============================================================================
 
     - name: "AUDIT | 5.5.5 | Verificar ausencia de umask permisivo en archivos de perfil"
       ansible.builtin.shell: |
@@ -1103,6 +1089,7 @@
       register: cis_5_5_5_restrictive
       changed_when: false
       check_mode: false
+      failed_when: false
       tags: ["audit", "5.5.5"]
 
     - name: "AUDIT | 5.5.5 | Validar umask por defecto >= 027"
@@ -1126,365 +1113,21 @@
           umask 027
       tags: ["remediation", "5.5.5"]
 
-
-# =============================================================================
-# 5.3.1 — Ensure permissions on /etc/ssh/sshd_config are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
-
-    - name: "AUDIT | 5.3.1 | Verificar permisos de /etc/ssh/sshd_config"
-      ansible.builtin.stat:
-        path: /etc/ssh/sshd_config
-      register: cis_5_3_1_stat
-      tags: ["audit", "5.3.1"]
-
-    - name: "AUDIT | 5.3.1 | Validar propietario root:root y permisos 0600"
-      ansible.builtin.assert:
-        that:
-          - cis_5_3_1_stat.stat.exists
-          - cis_5_3_1_stat.stat.uid == 0
-          - cis_5_3_1_stat.stat.gid == 0
-          - cis_5_3_1_stat.stat.mode == "0600"
-        success_msg: "PASS | 5.3.1 | Permisos de /etc/ssh/sshd_config correctamente configurados."
-        fail_msg: "FAIL | 5.3.1 | Permisos incorrectos en /etc/ssh/sshd_config. Se aplicará remediación."
+    - name: "REMEDIATION | 5.5.5 | Modificar definiciones permisivas de umask en perfil globales"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '^\s*umask\s+[0-7]+'
+        replace: "umask 027"
+      with_items:
+        - /etc/profile
+        - /etc/bashrc
       ignore_errors: true
-      tags: ["audit", "5.3.1"]
-
-    - name: "REMEDIATION | 5.3.1 | Asignar propietario root:root a sshd_config"
-      ansible.builtin.file:
-        path: /etc/ssh/sshd_config
-        owner: root
-        group: root
-        mode: "0600"
-      tags: ["remediation", "5.3.1"]
-
-
-# =============================================================================
-# 5.3.3 — Ensure permissions on SSH public host key files are configured (Automated)
-# CIS Controls v7: 14.6
-# =============================================================================
-
-    - name: "AUDIT | 5.3.3 | Buscar llaves públicas SSH del host"
-      ansible.builtin.find:
-        paths: /etc/ssh
-        patterns: "ssh_host_*_key.pub"
-        file_type: file
-      register: cis_5_3_3_pubkeys
-      tags: ["audit", "5.3.3"]
-
-    - name: "AUDIT | 5.3.3 | Verificar permisos de cada llave pública"
-      ansible.builtin.stat:
-        path: "{{ item.path }}"
-      register: cis_5_3_3_stats
-      loop: "{{ cis_5_3_3_pubkeys.files }}"
-      loop_control:
-        label: "{{ item.path }}"
-      tags: ["audit", "5.3.3"]
-
-    - name: "AUDIT | 5.3.3 | Validar permisos 0644 y propietario root en llaves públicas"
-      ansible.builtin.assert:
-        that:
-          - item.stat.uid == 0
-          - item.stat.gid == 0
-          - item.stat.mode == "0644"
-        success_msg: "PASS | 5.3.3 | {{ item.stat.path }} — permisos correctos."
-        fail_msg: "FAIL | 5.3.3 | {{ item.stat.path }} — permisos incorrectos."
-      loop: "{{ cis_5_3_3_stats.results }}"
-      loop_control:
-        label: "{{ item.stat.path }}"
-      ignore_errors: true
-      tags: ["audit", "5.3.3"]
-
-    - name: "REMEDIATION | 5.3.3 | Establecer permisos 0644 y root:root en llaves públicas"
-      ansible.builtin.file:
-        path: "{{ item.path }}"
-        owner: root
-        group: root
-        mode: "0644"
-      loop: "{{ cis_5_3_3_pubkeys.files }}"
-      loop_control:
-        label: "{{ item.path }}"
-      tags: ["remediation", "5.3.3"]
-
-
-# =============================================================================
-# 5.3.8 — Ensure SSH MaxAuthTries is set to 4 or less (Automated)
-# CIS Controls v7: 16.13
-# =============================================================================
-
-    - name: "AUDIT | 5.3.8 | Verificar MaxAuthTries en configuración activa de sshd"
-      ansible.builtin.shell: |
-        sshd -T -C user=root -C host="$(hostname)" \
-          -C addr="$(grep $(hostname) /etc/hosts | awk '{print $1}')" \
-          | grep maxauthtries
-      register: cis_5_3_8_runtime
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.8"]
-
-    - name: "AUDIT | 5.3.8 | Verificar ausencia de MaxAuthTries >= 5 en sshd_config"
-      ansible.builtin.shell: |
-        grep -Ei '^\s*maxauthtries\s+([5-9]|[1-9][0-9]+)' /etc/ssh/sshd_config \
-          && echo "FAIL" || echo "PASS"
-      register: cis_5_3_8_file
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.8"]
-
-    - name: "AUDIT | 5.3.8 | Validar MaxAuthTries <= 4"
-      ansible.builtin.assert:
-        that:
-          - cis_5_3_8_file.stdout == "PASS"
-          - cis_5_3_8_runtime.stdout is regex('maxauthtries\s+[1-4]$')
-        success_msg: "PASS | 5.3.8 | SSH MaxAuthTries configurado correctamente (<= 4)."
-        fail_msg: "FAIL | 5.3.8 | SSH MaxAuthTries excede el valor permitido. Se aplicará remediación."
-      ignore_errors: true
-      tags: ["audit", "5.3.8"]
-
-    - name: "REMEDIATION | 5.3.8 | Establecer MaxAuthTries 4 en sshd_config"
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^\s*MaxAuthTries'
-        line: "MaxAuthTries 4"
-        state: present
-      notify: Restart sshd
-      tags: ["remediation", "5.3.8"]
-
-
-# =============================================================================
-# 5.3.9 — Ensure SSH IgnoreRhosts is enabled (Automated)
-# CIS Controls v7: 9.2
-# =============================================================================
-
-    - name: "AUDIT | 5.3.9 | Verificar IgnoreRhosts en configuración activa de sshd"
-      ansible.builtin.shell: |
-        sshd -T -C user=root -C host="$(hostname)" \
-          -C addr="$(grep $(hostname) /etc/hosts | awk '{print $1}')" \
-          | grep ignorerhosts
-      register: cis_5_3_9_runtime
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.9"]
-
-    - name: "AUDIT | 5.3.9 | Verificar ausencia de IgnoreRhosts no en sshd_config"
-      ansible.builtin.shell: |
-        grep -Ei '^\s*ignorerhosts\s+no\b' /etc/ssh/sshd_config \
-          && echo "FAIL" || echo "PASS"
-      register: cis_5_3_9_file
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.9"]
-
-    - name: "AUDIT | 5.3.9 | Validar IgnoreRhosts habilitado"
-      ansible.builtin.assert:
-        that:
-          - "'ignorerhosts yes' in cis_5_3_9_runtime.stdout"
-          - cis_5_3_9_file.stdout == "PASS"
-        success_msg: "PASS | 5.3.9 | SSH IgnoreRhosts habilitado correctamente."
-        fail_msg: "FAIL | 5.3.9 | SSH IgnoreRhosts no está habilitado. Se aplicará remediación."
-      ignore_errors: true
-      tags: ["audit", "5.3.9"]
-
-    - name: "REMEDIATION | 5.3.9 | Establecer IgnoreRhosts yes en sshd_config"
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^\s*IgnoreRhosts'
-        line: "IgnoreRhosts yes"
-        state: present
-      notify: Restart sshd
-      tags: ["remediation", "5.3.9"]
-
-
-# =============================================================================
-# 5.3.12 — Ensure SSH PermitEmptyPasswords is disabled (Automated)
-# CIS Controls v7: 16.3
-# =============================================================================
-
-    - name: "AUDIT | 5.3.12 | Verificar PermitEmptyPasswords en configuración activa"
-      ansible.builtin.shell: |
-        sshd -T -C user=root -C host="$(hostname)" \
-          -C addr="$(grep $(hostname) /etc/hosts | awk '{print $1}')" \
-          | grep permitemptypasswords
-      register: cis_5_3_12_runtime
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.12"]
-
-    - name: "AUDIT | 5.3.12 | Verificar ausencia de PermitEmptyPasswords yes en sshd_config"
-      ansible.builtin.shell: |
-        grep -Ei '^\s*PermitEmptyPasswords\s+yes' /etc/ssh/sshd_config \
-          && echo "FAIL" || echo "PASS"
-      register: cis_5_3_12_file
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.12"]
-
-    - name: "AUDIT | 5.3.12 | Validar PermitEmptyPasswords deshabilitado"
-      ansible.builtin.assert:
-        that:
-          - "'permitemptypasswords no' in cis_5_3_12_runtime.stdout"
-          - cis_5_3_12_file.stdout == "PASS"
-        success_msg: "PASS | 5.3.12 | SSH PermitEmptyPasswords deshabilitado correctamente."
-        fail_msg: "FAIL | 5.3.12 | SSH permite contraseñas vacías. Se aplicará remediación."
-      ignore_errors: true
-      tags: ["audit", "5.3.12"]
-
-    - name: "REMEDIATION | 5.3.12 | Establecer PermitEmptyPasswords no en sshd_config"
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^\s*PermitEmptyPasswords'
-        line: "PermitEmptyPasswords no"
-        state: present
-      notify: Restart sshd
-      tags: ["remediation", "5.3.12"]
-
-
-# =============================================================================
-# 5.3.14 — Ensure only strong Ciphers are used (Automated)
-# CIS Controls v7: 14.4
-# =============================================================================
-
-    - name: "AUDIT | 5.3.14 | Verificar ausencia de cifrados débiles en sshd activo"
-      ansible.builtin.shell: |
-        sshd -T -C user=root -C host="$(hostname)" \
-          -C addr="$(grep $(hostname) /etc/hosts | awk '{print $1}')" \
-          | grep -Ei 'ciphers\s+([^#]+,)?(3des-cbc|aes128-cbc|aes192-cbc|aes256-cbc|arcfour|arcfour128|arcfour256|blowfish-cbc|cast128-cbc|rijndael-cbc@lysator.liu.se)' \
-          && echo "FAIL" || echo "PASS"
-      register: cis_5_3_14_runtime
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.14"]
-
-    - name: "AUDIT | 5.3.14 | Verificar ausencia de cifrados débiles en sshd_config"
-      ansible.builtin.shell: |
-        grep -Ei 'ciphers\s+([^#]+,)?(3des-cbc|aes128-cbc|aes192-cbc|aes256-cbc|arcfour|arcfour128|arcfour256|blowfish-cbc|cast128-cbc|rijndael-cbc@lysator.liu.se)' \
-          /etc/ssh/sshd_config && echo "FAIL" || echo "PASS"
-      register: cis_5_3_14_file
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.3.14"]
-
-    - name: "AUDIT | 5.3.14 | Validar que solo se usen cifrados fuertes"
-      ansible.builtin.assert:
-        that:
-          - cis_5_3_14_runtime.stdout == "PASS"
-          - cis_5_3_14_file.stdout == "PASS"
-        success_msg: "PASS | 5.3.14 | Solo cifrados fuertes configurados en SSH."
-        fail_msg: "FAIL | 5.3.14 | Cifrados débiles detectados en SSH. Se aplicará remediación."
-      ignore_errors: true
-      tags: ["audit", "5.3.14"]
-
-    - name: "REMEDIATION | 5.3.14 | Configurar solo cifrados fuertes (FIPS 140-2) en sshd_config"
-      ansible.builtin.lineinfile:
-        path: /etc/ssh/sshd_config
-        regexp: '^\s*Ciphers'
-        line: "Ciphers aes256-ctr,aes192-ctr,aes128-ctr"
-        state: present
-      notify: Restart sshd
-      tags: ["remediation", "5.3.14"]
-
-
-# =============================================================================
-# 5.4.1 — Ensure password creation requirements are configured (Automated)
-# CIS Controls v7: 4.4
-# =============================================================================
-
-    - name: "AUDIT | 5.4.1 | Verificar pam_cracklib en /etc/pam.d/password-auth"
-      ansible.builtin.shell: |
-        grep pam_cracklib.so /etc/pam.d/password-auth | \
-          grep -E 'minlen=1[4-9]|minlen=[2-9][0-9]' && echo "PASS" || echo "FAIL"
-      register: cis_5_4_1_pwauth
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.4.1"]
-
-    - name: "AUDIT | 5.4.1 | Verificar pam_cracklib en /etc/pam.d/system-auth"
-      ansible.builtin.shell: |
-        grep pam_cracklib.so /etc/pam.d/system-auth | \
-          grep -E 'minlen=1[4-9]|minlen=[2-9][0-9]' && echo "PASS" || echo "FAIL"
-      register: cis_5_4_1_sysauth
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.4.1"]
-
-    - name: "AUDIT | 5.4.1 | Validar requisitos de complejidad de contraseña"
-      ansible.builtin.assert:
-        that:
-          - cis_5_4_1_pwauth.stdout == "PASS"
-          - cis_5_4_1_sysauth.stdout == "PASS"
-        success_msg: "PASS | 5.4.1 | Requisitos de contraseña configurados correctamente (minlen>=14)."
-        fail_msg: "FAIL | 5.4.1 | Requisitos de contraseña insuficientes. Se aplicará remediación."
-      ignore_errors: true
-      tags: ["audit", "5.4.1"]
-
-    - name: "REMEDIATION | 5.4.1 | Configurar pam_cracklib en /etc/pam.d/password-auth"
-      ansible.builtin.lineinfile:
-        path: /etc/pam.d/password-auth
-        regexp: '^\s*password\s+requisite\s+pam_cracklib.so'
-        line: "password requisite pam_cracklib.so try_first_pass retry=3 minlen=14 dcredit=-1 ucredit=-1 ocredit=-1 lcredit=-1"
-        state: present
-      tags: ["remediation", "5.4.1"]
-
-    - name: "REMEDIATION | 5.4.1 | Configurar pam_cracklib en /etc/pam.d/system-auth"
-      ansible.builtin.lineinfile:
-        path: /etc/pam.d/system-auth
-        regexp: '^\s*password\s+requisite\s+pam_cracklib.so'
-        line: "password requisite pam_cracklib.so try_first_pass retry=3 minlen=14 dcredit=-1 ucredit=-1 ocredit=-1 lcredit=-1"
-        state: present
-      tags: ["remediation", "5.4.1"]
-
-
-# =============================================================================
-# 5.5.5 — Ensure default user umask is configured (Automated)
-# CIS Controls v7: 5.1, 13
-# =============================================================================
-
-    - name: "AUDIT | 5.5.5 | Verificar ausencia de umask permisivo en archivos de perfil"
-      ansible.builtin.shell: |
-        grep -Ev '^\s*umask\s+\s*(0[0-7][2-7]7|[0-7][2-7]7|u=(r?|w?|x?)(r?|w?|x?)(r?|w?|x?),g=(r?x?|x?r?),o=)\s*(\s*#.*)?$' \
-          /etc/profile /etc/profile.d/*.sh /etc/bashrc 2>/dev/null \
-          | grep -E '(^|^[^#]*)umask' && echo "FAIL" || echo "PASS"
-      register: cis_5_5_5_permissive
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.5.5"]
-
-    - name: "AUDIT | 5.5.5 | Verificar que exista umask 027 o más restrictivo definido"
-      ansible.builtin.shell: |
-        grep -E '^\s*umask\s+\s*(0[0-7][2-7]7|[0-7][2-7]7|u=(r?|w?|x?)(r?|w?|x?)(r?|w?|x?),g=(r?x?|x?r?),o=)\s*(\s*#.*)?$' \
-          /etc/profile /etc/profile.d/*.sh /etc/bashrc 2>/dev/null \
-          && echo "PASS" || echo "FAIL"
-      register: cis_5_5_5_defined
-      changed_when: false
-      check_mode: false
-      tags: ["audit", "5.5.5"]
-
-    - name: "AUDIT | 5.5.5 | Validar umask predeterminado seguro"
-      ansible.builtin.assert:
-        that:
-          - cis_5_5_5_permissive.stdout == "PASS"
-          - cis_5_5_5_defined.stdout == "PASS"
-        success_msg: "PASS | 5.5.5 | umask predeterminado configurado correctamente (027 o más restrictivo)."
-        fail_msg: "FAIL | 5.5.5 | umask inseguro o no definido. Se aplicará remediación."
-      ignore_errors: true
-      tags: ["audit", "5.5.5"]
-
-    - name: "REMEDIATION | 5.5.5 | Establecer umask 027 en /etc/profile.d/cis_umask.sh"
-      ansible.builtin.copy:
-        dest: /etc/profile.d/cis_umask.sh
-        owner: root
-        group: root
-        mode: "0644"
-        content: |
-          # CIS Benchmark 5.5.5 — Default umask 027
-          umask 027
       tags: ["remediation", "5.5.5"]
 
-
-# =============================================================================
-# 5.7 — Ensure access to the su command is restricted (Automated)
-# CIS Controls v7: 4
-# =============================================================================
+    # =============================================================================
+    # 5.7 — Ensure access to the su command is restricted (Automated)
+    # CIS Controls v7: 4
+    # =============================================================================
 
     - name: "AUDIT | 5.7 | Verificar pam_wheel.so en /etc/pam.d/su"
       ansible.builtin.shell: |
@@ -1514,16 +1157,16 @@
     - name: "REMEDIATION | 5.7 | Habilitar pam_wheel en /etc/pam.d/su"
       ansible.builtin.lineinfile:
         path: /etc/pam.d/su
-        regexp: '^\s*#?\s*auth\s+required\s+pam_wheel.so'
+        regexp: '(?i)^\s*#?\s*auth\s+required\s+pam_wheel.so'
+        insertafter: "^#%PAM-1.0"
         line: "auth required pam_wheel.so use_uid"
         state: present
       tags: ["remediation", "5.7"]
 
-
-# =============================================================================
-# 6.1.2 — Ensure permissions on /etc/passwd are configured (Automated)
-# CIS Controls v7: 16.4
-# =============================================================================
+    # =============================================================================
+    # 6.1.2 — Ensure permissions on /etc/passwd are configured (Automated)
+    # CIS Controls v7: 16.4
+    # =============================================================================
 
     - name: "AUDIT | 6.1.2 | Verificar permisos de /etc/passwd"
       ansible.builtin.stat:
@@ -1550,11 +1193,10 @@
         mode: "0644"
       tags: ["remediation", "6.1.2"]
 
-
-# =============================================================================
-# 6.1.6 — Ensure permissions on /etc/shadow are configured (Automated)
-# CIS Controls v7: 16.4
-# =============================================================================
+    # =============================================================================
+    # 6.1.6 — Ensure permissions on /etc/shadow are configured (Automated)
+    # CIS Controls v7: 16.4
+    # =============================================================================
 
     - name: "AUDIT | 6.1.6 | Verificar permisos de /etc/shadow"
       ansible.builtin.stat:
@@ -1581,11 +1223,10 @@
         mode: "0000"
       tags: ["remediation", "6.1.6"]
 
-
-# =============================================================================
-# 6.2.1 — Ensure accounts in /etc/passwd use shadowed passwords (Automated)
-# CIS Controls v7: 16.4
-# =============================================================================
+    # =============================================================================
+    # 6.2.1 — Ensure accounts in /etc/passwd use shadowed passwords (Automated)
+    # CIS Controls v7: 16.4
+    # =============================================================================
 
     - name: "AUDIT | 6.2.1 | Detectar cuentas sin contraseña shadow en /etc/passwd"
       ansible.builtin.shell: |
@@ -1610,11 +1251,10 @@
       changed_when: true
       tags: ["remediation", "6.2.1"]
 
-
-# =============================================================================
-# 6.2.7 — Ensure root PATH Integrity (Automated)
-# CIS Controls v7: 5.1
-# =============================================================================
+    # =============================================================================
+    # 6.2.7 — Ensure root PATH Integrity (Automated)
+    # CIS Controls v7: 5.1
+    # =============================================================================
 
     - name: "AUDIT | 6.2.7 | Verificar integridad del PATH de root"
       ansible.builtin.shell: |
@@ -1663,10 +1303,57 @@
       ignore_errors: true
       tags: ["audit", "6.2.7"]
 
+    - name: "REMEDIATION | 6.2.7 | Remover rutas vacías o relativas (:) en PATH de root dentro de archivos de perfil"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: "(PATH=.*)::(.*)"
+        replace: '\1:\2'
+      with_items:
+        - /root/.bash_profile
+        - /root/.bashrc
+        - /etc/profile
+        - /etc/bashrc
+      ignore_errors: true
+      tags: ["remediation", "6.2.7"]
 
-# =============================================================================
-# REPORT — Reporte consolidado de cumplimiento
-# =============================================================================
+    - name: "REMEDIATION | 6.2.7 | Remover trailing colons (:$ o :.) en PATH de root dentro de variables de entorno"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '(PATH=.*)(:|\.:|:\.)$'
+        replace: '\1'
+      with_items:
+        - /root/.bash_profile
+        - /root/.bashrc
+        - /etc/profile
+        - /etc/bashrc
+      ignore_errors: true
+      tags: ["remediation", "6.2.7"]
+
+    - name: "REMEDIATION | 6.2.7 | Remover directorios actuales o peligrosos en el PATH de root"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '(PATH=.*)(:\.|::)'
+        replace: '\1'
+      with_items:
+        - /root/.bash_profile
+        - /root/.bashrc
+        - /etc/profile
+        - /etc/bashrc
+      ignore_errors: true
+      tags: ["remediation", "6.2.7"]
+
+    - name: "REMEDIATION | 6.2.7 | Crear /root/bin si aparece en PATH pero no existe"
+      ansible.builtin.file:
+        path: /root/bin
+        state: directory
+        owner: root
+        group: root
+        mode: "0750"
+      tags: ["remediation", "6.2.7"]
+
+    # =============================================================================
+    # REPORT — Reporte consolidado de cumplimiento
+    # =============================================================================
 
     - name: "REPORT | Generar reporte consolidado CIS"
       ansible.builtin.copy:
@@ -1741,7 +1428,7 @@
           5.3.12 PermitEmptyPasswords : {{ cis_5_3_12_runtime.stdout | default('N/A') }}
           5.3.14 Weak ciphers check   : {{ cis_5_3_14_runtime.stdout | default('N/A') }}
           5.4.1 pam_cracklib pwauth   : {{ cis_5_4_1_pwauth.stdout | default('N/A') }}
-          5.5.5 umask definido        : {{ cis_5_5_5_defined.stdout | default('N/A') }}
+          5.5.5 umask definido        : {{ cis_5_5_5_restrictive.stdout | default('N/A') }}
           5.7   pam_wheel su          : {{ cis_5_7_pam.stdout | default('N/A') }}
           5.7   wheel members         : {{ cis_5_7_wheel.stdout | default('N/A') }}
           6.1.2 /etc/passwd mode      : {{ cis_6_1_2_stat.stat.mode | default('N/A') }}
@@ -1757,7 +1444,6 @@
       tags: ["report"]
 
   handlers:
-
     - name: Restart sshd
       ansible.builtin.service:
         name: sshd

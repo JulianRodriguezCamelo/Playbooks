@@ -1,0 +1,1181 @@
+---
+# =============================================================================
+# ANSIBLE PLAYBOOK — CIS Benchmark RHEL 7 v4.0.0
+# Profile   : Level 1 - Server | Level 1 - Workstation
+# Updated   : 2023-12-21
+# =============================================================================
+#
+# Ejecución:
+#   ansible-playbook CIS_Red_Hat_Enterprise_Linux_7_Benchmark_v4.0.0.yml -i inventory.ini
+#   ansible-playbook CIS_Red_Hat_Enterprise_Linux_7_Benchmark_v4.0.0.yml --tags audit
+#
+# =============================================================================
+
+- name: "CIS Benchmark | RHEL 7 Hardening — Level 1"
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    login_banner_text: "Authorized uses only. All activity may be monitored and reported."
+    report_path: "/root/cis_compliance_report.txt"
+
+  tasks:
+    - name: "GATHER | Obtener hechos de servicios"
+      ansible.builtin.service_facts:
+      tags: ["always", "report"]
+    # =============================================================================
+    # 1.3.3 — Ensure authentication required for single user mode (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.3.3 | Verificar sulogin en emergency.service"
+      ansible.builtin.shell: |
+        grep -q "/sbin/sulogin" /usr/lib/systemd/system/emergency.service && echo "PASS" || echo "FAIL"
+      register: cis_1_3_3_emergency
+      changed_when: false
+      tags: ["audit", "1.3.3"]
+
+    - name: "AUDIT | 1.3.3 | Verificar sulogin en rescue.service"
+      ansible.builtin.shell: |
+        grep -q "/sbin/sulogin" /usr/lib/systemd/system/rescue.service && echo "PASS" || echo "FAIL"
+      register: cis_1_3_3_rescue
+      changed_when: false
+      tags: ["audit", "1.3.3"]
+
+    - name: "AUDIT | 1.3.3 | Validar requerimiento de sulogin"
+      ansible.builtin.assert:
+        that:
+          - cis_1_3_3_emergency.stdout == "PASS"
+          - cis_1_3_3_rescue.stdout == "PASS"
+        success_msg: "PASS | 1.3.3 | Autenticación requerida para modo single user."
+        fail_msg: "FAIL | 1.3.3 | No se requiere autenticación para modo single user. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "1.3.3"]
+
+    - name: "REMEDIATION | 1.3.3 | Configurar autenticación en emergency.service"
+      ansible.builtin.replace:
+        path: /usr/lib/systemd/system/emergency.service
+        regexp: '^-?ExecStart=.*'
+        replace: 'ExecStart=-/usr/lib/systemd/systemd-sulogin-shell emergency'
+      when: cis_1_3_3_emergency.stdout == "FAIL"
+      tags: ["remediation", "1.3.3"]
+
+    - name: "REMEDIATION | 1.3.3 | Configurar autenticación en rescue.service"
+      ansible.builtin.replace:
+        path: /usr/lib/systemd/system/rescue.service
+        regexp: '^-?ExecStart=.*'
+        replace: 'ExecStart=-/usr/lib/systemd/systemd-sulogin-shell rescue'
+      when: cis_1_3_3_rescue.stdout == "FAIL"
+      tags: ["remediation", "1.3.3"]
+
+    # =============================================================================
+    # 1.4.1 — Ensure address space layout randomization (ASLR) is enabled (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.4.1 | Verificar kernel.randomize_va_space = 2"
+      ansible.builtin.command: sysctl kernel.randomize_va_space
+      register: cis_1_5_3_aslr
+      changed_when: false
+      tags: ["audit", "1.4.1"]
+
+    - name: "AUDIT | 1.4.1 | Validar ASLR habilitado"
+      ansible.builtin.assert:
+        that: "'kernel.randomize_va_space = 2' in cis_1_5_3_aslr.stdout"
+        success_msg: "PASS | 1.4.1 | ASLR habilitado correctamente."
+        fail_msg: "FAIL | 1.4.1 | ASLR no habilitado. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "1.4.1"]
+
+    - name: "REMEDIATION | 1.4.1 | Establecer kernel.randomize_va_space = 2"
+      ansible.posix.sysctl:
+        name: kernel.randomize_va_space
+        value: "2"
+        state: present
+        reload: true
+      tags: ["remediation", "1.4.1"]
+
+    # =============================================================================
+    # 1.4.2 — Ensure ptrace_scope is restricted (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.4.2 | Verificar kernel.yama.ptrace_scope = 1"
+      ansible.builtin.command: sysctl kernel.yama.ptrace_scope
+      register: cis_1_4_2_ptrace
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "1.4.2"]
+
+    - name: "AUDIT | 1.4.2 | Validar restricción de ptrace_scope"
+      ansible.builtin.assert:
+        that: "'kernel.yama.ptrace_scope = 1' in cis_1_4_2_ptrace.stdout"
+        success_msg: "PASS | 1.4.2 | ptrace_scope restringido correctamente."
+        fail_msg: "FAIL | 1.4.2 | ptrace_scope no restringido o no disponible. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "1.4.2"]
+
+    - name: "REMEDIATION | 1.4.2 | Establecer kernel.yama.ptrace_scope = 1"
+      ansible.posix.sysctl:
+        name: kernel.yama.ptrace_scope
+        value: "1"
+        state: present
+        reload: true
+      ignore_errors: true
+      tags: ["remediation", "1.4.2"]
+
+    # =============================================================================
+    # 1.4.4 — Ensure core dump storage is disabled (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.4.4 | Verificar Storage=none en coredump.conf"
+      ansible.builtin.shell: grep -q "^Storage=none" /etc/systemd/coredump.conf && echo "PASS" || echo "FAIL"
+      register: cis_1_5_1_sysctl
+      changed_when: false
+      tags: ["audit", "1.4.4"]
+
+    - name: "AUDIT | 1.4.4 | Validar deshabilitación de core dump"
+      ansible.builtin.assert:
+        that: cis_1_5_1_sysctl.stdout == "PASS"
+        success_msg: "PASS | 1.4.4 | Almacenamiento de core dump deshabilitado."
+        fail_msg: "FAIL | 1.4.4 | Almacenamiento de core dump habilitado. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "1.4.4"]
+
+    - name: "REMEDIATION | 1.4.4 | Configurar Storage=none en coredump.conf"
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/coredump.conf
+        regexp: '^#?Storage='
+        line: 'Storage=none'
+      tags: ["remediation", "1.4.4"]
+
+    # =============================================================================
+    # 1.5.1.5 — Ensure the SELinux mode is enforcing (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.5.1.5 | Verificar modo SELinux enforcing"
+      ansible.builtin.command: getenforce
+      register: cis_1_5_1_5_selinux
+      changed_when: false
+      tags: ["audit", "1.5.1.5"]
+
+    - name: "AUDIT | 1.5.1.5 | Validar SELinux enforcing"
+      ansible.builtin.assert:
+        that: "'Enforcing' in cis_1_5_1_5_selinux.stdout"
+        success_msg: "PASS | 1.5.1.5 | SELinux en modo enforcing."
+        fail_msg: "FAIL | 1.5.1.5 | SELinux no está en modo enforcing. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "1.5.1.5"]
+
+    - name: "REMEDIATION | 1.5.1.5 | Configurar SELinux en modo enforcing"
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^SELINUX='
+        line: 'SELINUX=enforcing'
+      tags: ["remediation", "1.5.1.5"]
+
+    # =============================================================================
+    # 1.6 — Configure Command Line Warning Banners (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.6 | Verificar banners institucionales"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: cis_1_6_banners
+      loop:
+        - /etc/issue
+        - /etc/issue.net
+        - /etc/motd
+      tags: ["audit", "1.6"]
+
+    - name: "AUDIT | 1.7.1 | Verificar info en motd (Report)"
+      ansible.builtin.command: cat /etc/motd
+      register: cis_1_7_1_check
+      changed_when: false
+      tags: ["audit", "report"]
+
+    - name: "AUDIT | 1.7.6 | Stat /etc/issue.net (Report)"
+      ansible.builtin.stat:
+        path: /etc/issue.net
+      register: cis_1_7_6_stat
+      tags: ["audit", "report"]
+
+    - name: "REMEDIATION | 1.6 | Configurar banners correctos"
+      ansible.builtin.copy:
+        dest: "{{ item }}"
+        content: "{{ login_banner_text }}\n"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - /etc/issue
+        - /etc/issue.net
+        - /etc/motd
+      tags: ["remediation", "1.6"]
+
+    # =============================================================================
+    # 1.7.1 — Ensure GNOME Display Manager is removed (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 1.7.1 | Verificar si GDM está instalado"
+      ansible.builtin.command: rpm -q gdm
+      register: cis_1_7_1_gdm
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "1.7.1"]
+
+    - name: "AUDIT | 1.7.1 | Validar ausencia de GDM"
+      ansible.builtin.assert:
+        that: cis_1_7_1_gdm.rc != 0
+        success_msg: "PASS | 1.7.1 | GDM no detectado."
+        fail_msg: "FAIL | 1.7.1 | GDM instalado. Se removerá."
+      ignore_errors: true
+      tags: ["audit", "1.7.1"]
+
+    - name: "REMEDIATION | 1.7.1 | Remover paquete GDM"
+      ansible.builtin.yum:
+        name: gdm
+        state: absent
+      tags: ["remediation", "1.7.1"]
+
+    # =============================================================================
+    # 2.2.1 - 2.2.20 — Ensure unnecessary services are removed (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 2.2.1-2.2.20 | Verificar servicios instalados"
+      ansible.builtin.command: rpm -q autofs avahi dhcp bind dnsmasq samba vsftpd dovecot cyrus-imapd nfs-utils ypserv cups rpcbind rsync net-snmp telnet-server tftp-server squid httpd xinetd
+      register: cis_2_2_services
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "2.2.1-20"]
+
+    - name: "AUDIT | 2.2.1-2.2.20 | Validar ausencia de servicios innecesarios"
+      ansible.builtin.assert:
+        that: cis_2_2_services.rc != 0
+        success_msg: "PASS | 2.2 | Servicios innecesarios no instalados."
+        fail_msg: "FAIL | 2.2 | Algunos servicios prohibidos detectados. Se procederá a removerlos."
+      ignore_errors: true
+      tags: ["audit", "2.2.1-20"]
+
+    - name: "REMEDIATION | 2.2 | Remover paquetes de servicios innecesarios"
+      ansible.builtin.yum:
+        name:
+          - autofs
+          - avahi
+          - dhcp
+          - bind
+          - dnsmasq
+          - samba
+          - vsftpd
+          - dovecot
+          - cyrus-imapd
+          - nfs-utils
+          - ypserv
+          - cups
+          - rpcbind
+          - rsync
+          - net-snmp
+          - telnet-server
+          - tftp-server
+          - squid
+          - httpd
+          - xinetd
+        state: absent
+      tags: ["remediation", "2.2"]
+
+    # =============================================================================
+    # 2.2.21 — Ensure mail transfer agents are configured for local-only mode (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 2.2.21 | Verificar configuración local-only de postfix"
+      ansible.builtin.shell: |
+        grep "^inet_interfaces = loopback-only" /etc/postfix/main.cf && echo "PASS" || echo "FAIL"
+      register: cis_2_2_21_postfix
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "2.2.21"]
+
+    - name: "AUDIT | 2.2.21 | Validar configuración de postfix"
+      ansible.builtin.assert:
+        that: cis_2_2_21_postfix.stdout == "PASS"
+        success_msg: "PASS | 2.2.21 | Postfix en modo loopback-only."
+        fail_msg: "FAIL | 2.2.21 | Postfix no configurado correctamente. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "2.2.21"]
+
+    - name: "REMEDIATION | 2.2.21 | Configurar postfix para local-only mode"
+      ansible.builtin.lineinfile:
+        path: /etc/postfix/main.cf
+        regexp: '^inet_interfaces ='
+        line: 'inet_interfaces = loopback-only'
+      notify: restart postfix
+      tags: ["remediation", "2.2.21"]
+
+    # =============================================================================
+    # 2.3 — Configure Service Clients (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 2.3 | Verificar si clientes rsh, talk, telnet, ypbind están instalados"
+      ansible.builtin.command: rpm -q ypbind rsh talk telnet openldap-clients
+      register: cis_2_3_clients
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "2.3"]
+
+    - name: "AUDIT | 2.3 | Validar ausencia de clientes inseguros"
+      ansible.builtin.assert:
+        that: cis_2_3_clients.rc != 0
+        success_msg: "PASS | 2.3 | Clientes inseguros no instalados."
+        fail_msg: "FAIL | 2.3 | Clientes inseguros detectados. Se removerán."
+      ignore_errors: true
+      tags: ["audit", "2.3"]
+
+    - name: "REMEDIATION | 2.3 | Remover paquetes de clientes inseguros"
+      ansible.builtin.yum:
+        name:
+          - ypbind
+          - rsh
+          - talk
+          - telnet
+          - openldap-clients
+        state: absent
+      tags: ["remediation", "2.3"]
+
+    # =============================================================================
+    # 3.1.2 — Ensure wireless interfaces are disabled (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 3.1.2 | Verificar interfaces inalámbricas"
+      ansible.builtin.shell: |
+        nmcli radio wifi | grep -q "disabled" && echo "PASS" || echo "FAIL"
+      register: cis_3_1_2_wifi
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "3.1.2"]
+
+    - name: "AUDIT | 3.1.2 | Validar estado de wifi"
+      ansible.builtin.assert:
+        that: cis_3_1_2_wifi.stdout == "PASS"
+        success_msg: "PASS | 3.1.2 | Interfaces inalámbricas desactivadas."
+        fail_msg: "FAIL | 3.1.2 | Interfaces inalámbricas activas. Desactivando."
+      ignore_errors: true
+      tags: ["audit", "3.1.2"]
+
+    - name: "REMEDIATION | 3.1.2 | Desactivar wifi"
+      ansible.builtin.command: nmcli radio wifi off
+      when: cis_3_1_2_wifi.stdout == "FAIL"
+      tags: ["remediation", "3.1.2"]
+
+    # =============================================================================
+    # 3.1.3 — Ensure bluetooth services are not in use (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 3.1.3 | Verificar estado de bluetooth"
+      ansible.builtin.systemd:
+        name: bluetooth
+      register: cis_3_1_3_bluetooth
+      tags: ["audit", "3.1.3"]
+
+    - name: "AUDIT | 3.1.3 | Validar bluetooth desactivado"
+      ansible.builtin.assert:
+        that: 
+          - cis_3_1_3_bluetooth.status.ActiveState != "active"
+          - cis_3_1_3_bluetooth.status.UnitFileState == "disabled"
+        success_msg: "PASS | 3.1.3 | Bluetooth desactivado."
+        fail_msg: "FAIL | 3.1.3 | Bluetooth activo o habilitado. Desactivando."
+      ignore_errors: true
+      tags: ["audit", "3.1.3"]
+
+    - name: "REMEDIATION | 3.1.3 | Parar y deshabilitar bluetooth"
+      ansible.builtin.systemd:
+        name: bluetooth
+        state: stopped
+        enabled: false
+      tags: ["remediation", "3.1.3"]
+
+    # =============================================================================
+    # 3.2 — Configure Network Kernel Modules (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 3.2 | Verificar módulos de red deshabilitados"
+      ansible.builtin.shell: |
+        modprobe -n -v {{ item }} | grep -E "(install /bin/true|install /bin/false)" && echo "PASS" || echo "FAIL"
+      register: cis_3_2_modules
+      loop:
+        - dccp
+        - sctp
+        - rds
+        - tipc
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "3.2"]
+
+    - name: "AUDIT | 3.2 | Validar módulos de red deshabilitados"
+      ansible.builtin.assert:
+        that: item.stdout == "PASS"
+        success_msg: "PASS | 3.2 | Módulo {{ item.item }} deshabilitado."
+        fail_msg: "FAIL | 3.2 | Módulo {{ item.item }} no está deshabilitado. Aplicando remediación."
+      loop: "{{ cis_3_2_modules.results }}"
+      ignore_errors: true
+      tags: ["audit", "3.2"]
+
+    - name: "REMEDIATION | 3.2 | Deshabilitar módulos de red"
+      ansible.builtin.copy:
+        dest: "/etc/modprobe.d/{{ item }}.conf"
+        content: "install {{ item }} /bin/true\n"
+        owner: root
+        group: root
+        mode: '0644'
+      loop:
+        - dccp
+        - sctp
+        - rds
+        - tipc
+      tags: ["remediation", "3.2"]
+
+    # =============================================================================
+    # 3.3 — Network Kernel Parameters (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 3.3 | Verificar parámetros de red en sysctl"
+      ansible.builtin.command: "sysctl {{ item.name }}"
+      register: cis_3_3_sysctl
+      loop:
+        - { name: 'net.ipv4.ip_forward', value: '0' }                   # 3.3.1
+        - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }      # 3.3.2
+        - { name: 'net.ipv4.conf.default.send_redirects', value: '0' }  # 3.3.2
+        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }    # 3.3.5
+        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' } # 3.3.5
+        - { name: 'net.ipv4.conf.all.secure_redirects', value: '0' }    # 3.3.6
+        - { name: 'net.ipv4.conf.default.secure_redirects', value: '0' } # 3.3.6
+        - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }           # 3.3.7
+        - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }       # 3.3.7
+        - { name: 'net.ipv4.conf.all.accept_source_route', value: '0' } # 3.3.8
+        - { name: 'net.ipv4.conf.default.accept_source_route', value: '0' } # 3.3.8
+        - { name: 'net.ipv4.conf.all.log_martians', value: '1' }        # 3.3.9
+        - { name: 'net.ipv4.conf.default.log_martians', value: '1' }    # 3.3.9
+        - { name: 'net.ipv4.tcp_syncookies', value: '1' }               # 3.3.10
+      changed_when: false
+      tags: ["audit", "3.3"]
+
+    - name: "AUDIT | 3.3 | Validar parámetros de red"
+      ansible.builtin.assert:
+        that: "'{{ item.item.value }}' in item.stdout"
+        success_msg: "PASS | 3.3 | Parámetro {{ item.item.name }} correcto."
+        fail_msg: "FAIL | 3.3 | Parámetro {{ item.item.name }} incorrecto. Aplicando remediación."
+      loop: "{{ cis_3_3_sysctl.results }}"
+      ignore_errors: true
+      tags: ["audit", "3.3"]
+
+    - name: "AUDIT | 3.2.1 | IP Forwarding (Report)"
+      ansible.builtin.command: sysctl net.ipv4.ip_forward
+      register: cis_3_2_1_ipv4_fwd
+      changed_when: false
+      tags: ["audit", "report"]
+
+    - name: "AUDIT | 3.3.1 | Source Route All (Report)"
+      ansible.builtin.command: sysctl net.ipv4.conf.all.accept_source_route
+      register: cis_3_3_1_ipv4_all
+      changed_when: false
+      tags: ["audit", "report"]
+
+    - name: "AUDIT | 3.3.1 | Source Route Default (Report)"
+      ansible.builtin.command: sysctl net.ipv4.conf.default.accept_source_route
+      register: cis_3_3_1_ipv4_default
+      changed_when: false
+      tags: ["audit", "report"]
+
+    - name: "AUDIT | 3.3.8 | TCP Syncookies (Report)"
+      ansible.builtin.command: sysctl net.ipv4.tcp_syncookies
+      register: cis_3_3_8_runtime
+      changed_when: false
+      tags: ["audit", "report"]
+
+    - name: "REMEDIATION | 3.3 | Configurar parámetros de red en sysctl"
+      ansible.posix.sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: true
+      loop:
+        - { name: 'net.ipv4.ip_forward', value: '0' }
+        - { name: 'net.ipv4.conf.all.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.send_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.default.secure_redirects', value: '0' }
+        - { name: 'net.ipv4.conf.all.rp_filter', value: '1' }
+        - { name: 'net.ipv4.conf.default.rp_filter', value: '1' }
+        - { name: 'net.ipv4.conf.all.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.conf.default.accept_source_route', value: '0' }
+        - { name: 'net.ipv4.conf.all.log_martians', value: '1' }
+        - { name: 'net.ipv4.conf.default.log_martians', value: '1' }
+        - { name: 'net.ipv4.tcp_syncookies', value: '1' }
+      tags: ["remediation", "3.3"]
+
+    # =============================================================================
+    # 3.4 — Configure Host Based Firewall (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 3.4 | Verificar estado de firewalld"
+      ansible.builtin.systemd:
+        name: firewalld
+      register: cis_3_4_firewalld
+      tags: ["audit", "3.4"]
+
+    - name: "AUDIT | 3.4 | Validar firewalld activo"
+      ansible.builtin.assert:
+        that:
+          - cis_3_4_firewalld.status.ActiveState == "active"
+          - cis_3_4_firewalld.status.UnitFileState == "enabled"
+        success_msg: "PASS | 3.4 | Firewalld activo y habilitado."
+        fail_msg: "FAIL | 3.4 | Firewalld no está activo o habilitado. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "3.4"]
+
+    - name: "REMEDIATION | 3.4 | Habilitar e iniciar firewalld"
+      ansible.builtin.systemd:
+        name: firewalld
+        state: started
+        enabled: true
+      tags: ["remediation", "3.4"]
+
+    # =============================================================================
+    # 4.1 — Configure Cron and At (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 4.1.1 | Verificar estado de crond"
+      ansible.builtin.systemd:
+        name: crond
+      register: cis_4_1_1_crond
+      tags: ["audit", "4.1.1"]
+
+    - name: "AUDIT | 4.1.1 | Validar crond activo"
+      ansible.builtin.assert:
+        that:
+          - cis_4_1_1_crond.status.ActiveState == "active"
+          - cis_4_1_1_crond.status.UnitFileState == "enabled"
+        success_msg: "PASS | 4.1.1 | crond activo y habilitado."
+        fail_msg: "FAIL | 4.1.1 | crond no está activo o habilitado. Aplicando remediación."
+      ignore_errors: true
+      tags: ["audit", "4.1.1"]
+
+    - name: "REMEDIATION | 4.1.1 | Habilitar e iniciar crond"
+      ansible.builtin.systemd:
+        name: crond
+        state: started
+        enabled: true
+      tags: ["remediation", "4.1.1"]
+
+    - name: "AUDIT | 4.1.8 | Verificar acceso cron/at"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      register: cis_4_1_8_stats
+      loop:
+        - /etc/cron.deny
+        - /etc/at.deny
+      tags: ["audit", "4.1.8"]
+
+    - name: "REMEDIATION | 4.1.8 | Restringir acceso cron/at"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/cron.deny
+        - /etc/at.deny
+      tags: ["remediation", "4.1.8"]
+
+    - name: "REMEDIATION | 4.1.8 | Crear cron.allow y at.allow"
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: touch
+        owner: root
+        group: root
+        mode: '0600'
+      loop:
+        - /etc/cron.allow
+        - /etc/at.allow
+      tags: ["remediation", "4.1.8"]
+
+    # =============================================================================
+    # 4.2 — SSH Server Configuration (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 4.2 | Verificar parámetros de SSH"
+      ansible.builtin.shell: |
+        grep -E "^#?{{ item.key }}\s+{{ item.value }}" /etc/ssh/sshd_config && echo "PASS" || echo "FAIL"
+      register: cis_4_2_ssh
+      loop:
+        - { key: 'Protocol', value: '2' }
+        - { key: 'LogLevel', value: 'INFO' }
+        - { key: 'MaxAuthTries', value: '4' }
+        - { key: 'IgnoreRhosts', value: 'yes' }
+        - { key: 'HostbasedAuthentication', value: 'no' }
+        - { key: 'PermitRootLogin', value: 'no' }
+        - { key: 'PermitEmptyPasswords', value: 'no' }
+        - { key: 'PermitUserEnvironment', value: 'no' }
+        - { key: 'ClientAliveInterval', value: '300' }
+        - { key: 'ClientAliveCountMax', value: '0' }
+        - { key: 'LoginGraceTime', value: '60' }
+        - { key: 'Banner', value: '/etc/issue.net' }
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "4.2"]
+
+    - name: "AUDIT | 4.2 | Validar parámetros de SSH"
+      ansible.builtin.assert:
+        that: item.stdout == "PASS"
+        success_msg: "PASS | 4.2 | Parámetro SSH {{ item.item.key }} correcto."
+        fail_msg: "FAIL | 4.2 | Parámetro SSH {{ item.item.key }} incorrecto. Aplicando remediación."
+      loop: "{{ cis_4_2_ssh.results }}"
+      ignore_errors: true
+      tags: ["audit", "4.2"]
+
+    - name: "REMEDIATION | 4.2 | Configurar SSH"
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^#?{{ item.key }}"
+        line: "{{ item.key }} {{ item.value }}"
+      loop:
+        - { key: 'Protocol', value: '2' }
+        - { key: 'LogLevel', value: 'INFO' }
+        - { key: 'MaxAuthTries', value: '4' }
+        - { key: 'IgnoreRhosts', value: 'yes' }
+        - { key: 'HostbasedAuthentication', value: 'no' }
+        - { key: 'PermitRootLogin', value: 'no' }
+        - { key: 'PermitEmptyPasswords', value: 'no' }
+        - { key: 'PermitUserEnvironment', value: 'no' }
+        - { key: 'ClientAliveInterval', value: '300' }
+        - { key: 'ClientAliveCountMax', value: '0' }
+        - { key: 'LoginGraceTime', value: '60' }
+        - { key: 'Banner', value: '/etc/issue.net' }
+      notify: reload sshd
+      tags: ["remediation", "4.2"]
+
+    # =============================================================================
+    # 4.4 — Configure User Accounts and Environment (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 4.4.1.1 | Verificar password aging"
+      ansible.builtin.shell: |
+        grep "^{{ item.key }}\s+{{ item.value }}" /etc/login.defs && echo "PASS" || echo "FAIL"
+      register: cis_4_4_1_1_aging
+      loop:
+        - { key: 'PASS_MAX_DAYS', value: '90' }
+        - { key: 'PASS_MIN_DAYS', value: '7' }
+        - { key: 'PASS_WARN_AGE', value: '7' }
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "4.4.1.1"]
+
+    - name: "REMEDIATION | 4.4.1.1 | Configurar password aging en /etc/login.defs"
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: "^{{ item.key }}"
+        line: "{{ item.key }} {{ item.value }}"
+      loop:
+        - { key: 'PASS_MAX_DAYS', value: '90' }
+        - { key: 'PASS_MIN_DAYS', value: '7' }
+        - { key: 'PASS_WARN_AGE', value: '7' }
+      tags: ["remediation", "4.4.1.1"]
+
+    - name: "REMEDIATION | 4.4.1.4 | Inactivar cuentas tras expirar contraseña"
+      ansible.builtin.command: useradd -D -f 30
+      tags: ["remediation", "4.4.1.4"]
+
+    # =============================================================================
+    # 4.3 — Sudo and Privilege Escalation (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 4.3.2 | Verificar use_pty en sudoers"
+      ansible.builtin.shell: |
+        grep -Ei '^\s*Defaults\s+([^#]+,)?use_pty' /etc/sudoers /etc/sudoers.d/* && echo "PASS" || echo "FAIL"
+      register: cis_4_3_2_pty
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "4.3.2"]
+
+    - name: "REMEDIATION | 4.3.2 | Asegurar use_pty en sudoers"
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        line: "Defaults use_pty"
+        validate: '/usr/sbin/visudo -cf %s'
+      tags: ["remediation", "4.3.2"]
+
+    - name: "AUDIT | 4.3.7 | Verificar restricción de acceso al comando su"
+      ansible.builtin.shell: |
+        grep -E '^\s*auth\s+required\s+pam_wheel.so\s+use_uid' /etc/pam.d/su && echo "PASS" || echo "FAIL"
+      register: cis_4_3_7_su
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "4.3.7"]
+
+    - name: "REMEDIATION | 4.3.7 | Restringir acceso a su mediante pam_wheel"
+      ansible.builtin.lineinfile:
+        path: /etc/pam.d/su
+        regexp: '(?i)^\s*#?\s*auth\s+required\s+pam_wheel.so'
+        insertafter: "^#%PAM-1.0"
+        line: "auth required pam_wheel.so use_uid"
+      tags: ["remediation", "4.3.7"]
+
+    # =============================================================================
+    # 4.4 — Configure pluggable module arguments (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 4.4.2 | Verificar hashing sha512 en PAM"
+      ansible.builtin.shell: |
+        grep -E '^\s*password\s+sufficient\s+pam_unix.so.*sha512' /etc/pam.d/system-auth && echo "PASS" || echo "FAIL"
+      register: cis_4_4_2_sha512
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "4.4.2"]
+
+    - name: "REMEDIATION | 4.4.2 | Configurar sha512 para contraseñas en /etc/pam.d/system-auth"
+      ansible.builtin.replace:
+        path: "{{ item }}"
+        regexp: '(pam_unix\.so\s+.*)(md5|bigcrypt|sha256|blowfish)(.*)'
+        replace: '\1sha512\3'
+      loop:
+        - /etc/pam.d/system-auth
+        - /etc/pam.d/password-auth
+      tags: ["remediation", "4.4.2"]
+
+    # =============================================================================
+    # 4.5 — Shadow Password Suite Parameters (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 4.5.1 | Verificar password hashing algorithm en login.defs"
+      ansible.builtin.shell: |
+        grep "^ENCRYPT_METHOD SHA512" /etc/login.defs && echo "PASS" || echo "FAIL"
+      register: cis_4_5_1_method
+      changed_when: false
+      tags: ["audit", "4.5.1"]
+
+    - name: "REMEDIATION | 4.5.1 | Establecer ENCRYPT_METHOD SHA512 en login.defs"
+      ansible.builtin.lineinfile:
+        path: /etc/login.defs
+        regexp: '^ENCRYPT_METHOD'
+        line: "ENCRYPT_METHOD SHA512"
+      tags: ["remediation", "4.5.1"]
+
+    - name: "AUDIT | 4.5.2.3 | Verificar bloqueo de cuentas de sistema"
+      ansible.builtin.shell: |
+        awk -F: '($1 != "root" && $1 != "sync" && $1 != "shutdown" && $1 != "halt" && $3 < 1000 && $7 != "/sbin/nologin" && $7 != "/bin/false") {print $1}' /etc/passwd
+      register: cis_4_5_2_3_sys_accounts
+      changed_when: false
+      tags: ["audit", "4.5.2.3"]
+
+    - name: "REMEDIATION | 4.5.2.3 | Bloquear cuentas de sistema"
+      ansible.builtin.shell: |
+        for user in {{ cis_4_5_2_3_sys_accounts.stdout_lines | join(' ') }}; do
+          usermod -L "$user"
+          usermod -s /sbin/nologin "$user"
+        done
+      when: cis_4_5_2_3_sys_accounts.stdout != ""
+      tags: ["remediation", "4.5.2.3"]
+
+    # =============================================================================
+    # 5.1 — Configure systemd-journald (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 5.1 | Verificar configuración de journald"
+      ansible.builtin.shell: |
+        grep -E "^(Compress|Storage)=" /etc/systemd/journald.conf && echo "PASS" || echo "FAIL"
+      register: cis_5_1_journald
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "5.1"]
+
+    - name: "REMEDIATION | 5.1 | Configurar journald para compresión y persistencia"
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/journald.conf
+        regexp: "^{{ item.key }}="
+        line: "{{ item.key }}={{ item.value }}"
+      loop:
+        - { key: 'Compress', value: 'yes' }
+        - { key: 'Storage', value: 'persistent' }
+      notify: restart journald
+      tags: ["remediation", "5.1"]
+
+    # =============================================================================
+    # 5.2 — Configure auditd (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 5.2.1.1 | Verificar que auditd esté instalado"
+      ansible.builtin.command: rpm -q audit
+      register: cis_5_2_1_1_audit
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "5.2.1.1"]
+
+    - name: "REMEDIATION | 5.2.1.1 | Instalar y habilitar auditd"
+      ansible.builtin.yum:
+        name: audit
+        state: present
+      tags: ["remediation", "5.2.1.1"]
+
+    - name: "REMEDIATION | 5.2.1.1 | Habilitar auditd"
+      ansible.builtin.systemd:
+        name: auditd
+        enabled: true
+        state: started
+      tags: ["remediation", "5.2.1.1"]
+
+    - name: "AUDIT | 5.2.1.3 | Verificar auditoría en el arranque"
+      ansible.builtin.shell: |
+        grep "^\s*kernel.*audit=1" /boot/grub2/grub.cfg && echo "PASS" || echo "FAIL"
+      register: cis_5_2_1_3_boot
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "5.2.1.3"]
+
+    - name: "REMEDIATION | 5.2.1.3 | Habilitar auditoría en GRUB"
+      ansible.builtin.replace:
+        path: /etc/default/grub
+        regexp: '^GRUB_CMDLINE_LINUX="(.*)"'
+        replace: 'GRUB_CMDLINE_LINUX="\1 audit=1"'
+      notify: update grub
+      tags: ["remediation", "5.2.1.3"]
+
+    - name: "AUDIT | 5.2.1.4 | Verificar manejo de logs llenos"
+      ansible.builtin.shell: |
+        grep -E "^(max_log_file_action|space_left_action|admin_space_left_action)=" /etc/audit/auditd.conf && echo "PASS" || echo "FAIL"
+      register: cis_5_2_1_4_conf
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "5.2.1.4"]
+
+    - name: "REMEDIATION | 5.2.1.4 | Configurar manejo de logs de auditoría"
+      ansible.builtin.lineinfile:
+        path: /etc/audit/auditd.conf
+        regexp: "^{{ item.key }} ="
+        line: "{{ item.key }} = {{ item.value }}"
+      loop:
+        - { key: 'max_log_file_action', value: 'keep_logs' }
+        - { key: 'space_left_action', value: 'email' }
+        - { key: 'admin_space_left_action', value: 'halt' }
+      tags: ["remediation", "5.2.1.4"]
+
+    - name: "REMEDIATION | 5.2.22 | Hacer la configuración de auditoría inmutable"
+      ansible.builtin.lineinfile:
+        path: /etc/audit/rules.d/99-finalize.rules
+        line: "-e 2"
+        create: true
+      tags: ["remediation", "5.2.22"]
+
+    # =============================================================================
+    # 5.3 — Configure AIDE (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 5.3.1 | Verificar que AIDE esté instalado"
+      ansible.builtin.command: rpm -q aide
+      register: cis_5_3_1_aide
+      changed_when: false
+      failed_when: false
+      tags: ["audit", "5.3.1"]
+
+    - name: "REMEDIATION | 5.3.1 | Instalar e inicializar AIDE"
+      block:
+        - ansible.builtin.yum:
+            name: aide
+            state: present
+        - ansible.builtin.command: aide --init
+          register: aide_init
+          changed_when: true
+          failed_when: false
+        - ansible.builtin.command: cp /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+          when: aide_init.rc == 0
+      tags: ["remediation", "5.3.1"]
+
+    # =============================================================================
+    # 6.1 — System File Permissions (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 6.1.1 | Verificar permisos de /etc/passwd"
+      ansible.builtin.stat:
+        path: /etc/passwd
+      register: cis_6_1_1_stat
+      tags: ["audit", "6.1.1"]
+
+    - name: "REMEDIATION | 6.1.1 | Asignar root:root y 0644 a /etc/passwd"
+      ansible.builtin.file:
+        path: /etc/passwd
+        owner: root
+        group: root
+        mode: "0644"
+      when: cis_6_1_1_stat.stat.uid != 0 or cis_6_1_1_stat.stat.gid != 0 or cis_6_1_1_stat.stat.mode != "0644"
+      tags: ["remediation", "6.1.1"]
+
+    - name: "AUDIT | 6.1.10 | Verificar permisos de /etc/security/opasswd"
+      ansible.builtin.stat:
+        path: /etc/security/opasswd
+      register: cis_6_1_10_opasswd
+      tags: ["audit", "6.1.10"]
+
+    - name: "REMEDIATION | 6.1.10 | Asegurar permisos 0600 en /etc/security/opasswd"
+      ansible.builtin.file:
+        path: /etc/security/opasswd
+        owner: root
+        group: root
+        mode: '0600'
+      when: cis_6_1_10_opasswd.stat.exists and (cis_6_1_10_opasswd.stat.mode != "0600" or cis_6_1_10_opasswd.stat.uid != 0)
+      tags: ["remediation", "6.1.10"]
+
+    - name: "AUDIT | 6.1.11 | Verificar archivos world-writable"
+      ansible.builtin.shell: |
+        find / -xdev -type f -perm -0002 -print
+      register: cis_6_1_11_world_writable
+      changed_when: false
+      tags: ["audit", "6.1.11"]
+
+    # =============================================================================
+    # 6.2 — User and Group Settings (Automated)
+    # =============================================================================
+
+    - name: "AUDIT | 6.2.1 | Verificar cuentas con contraseñas shadowed"
+      ansible.builtin.shell: |
+        awk -F: '($2 != "x") {print $1}' /etc/passwd
+      register: cis_6_2_1_unshadowed
+      changed_when: false
+      tags: ["audit", "6.2.1"]
+
+    - name: "AUDIT | 6.2.2 | Verificar campos de contraseña vacíos en /etc/shadow"
+      ansible.builtin.shell: |
+        awk -F: '($2 == "" ) { print $1 }' /etc/shadow
+      register: cis_6_2_2_empty_shadow
+      changed_when: false
+      tags: ["audit", "6.2.2"]
+
+    - name: "AUDIT | 6.2.3 | Verificar integridad de grupos en /etc/passwd"
+      ansible.builtin.shell: |
+        for i in $(awk -F: '{print $4}' /etc/passwd); do
+          grep -q "^.*:x:$i:" /etc/group || echo "$i"
+        done
+      register: cis_6_2_3_group_integrity
+      changed_when: false
+      tags: ["audit", "6.2.3"]
+
+    - name: "AUDIT | 6.2.4-6.2.7 | Verificar duplicados (UID, GID, User, Group)"
+      ansible.builtin.shell: |
+        /usr/bin/awk -F: '{print $3}' /etc/passwd | sort | uniq -d && echo "DUPLICATE_UID"
+        /usr/bin/awk -F: '{print $3}' /etc/group | sort | uniq -d && echo "DUPLICATE_GID"
+        /usr/bin/awk -F: '{print $1}' /etc/passwd | sort | uniq -d && echo "DUPLICATE_USER"
+        /usr/bin/awk -F: '{print $1}' /etc/group | sort | uniq -d && echo "DUPLICATE_GROUP"
+      register: cis_6_2_duplicates
+      changed_when: false
+      tags: ["audit", "6.2.4-7"]
+
+    - name: "AUDIT | 6.2.9 | Verificar cuentas con UID 0"
+      ansible.builtin.shell: |
+        awk -F: '($3 == 0) { print $1 }' /etc/passwd
+      register: cis_6_2_9_uid_zero
+      changed_when: false
+      tags: ["audit", "6.2.9"]
+
+    - name: "AUDIT | 6.2.11 | Verificar archivos punto en Directorios Home"
+      ansible.builtin.shell: |
+        for dir in $(awk -F: '($3 >= 1000 && $7 != "/sbin/nologin" && $7 != "/bin/false") { print $6 }' /etc/passwd); do
+          [ -d "$dir" ] && find "$dir" -maxdepth 1 -name ".*" -perm /g+w,o+w
+        done
+      register: cis_6_2_11_dot_files
+      changed_when: false
+      tags: ["audit", "6.2.11"]
+
+    - name: "REMEDIATION | 6.2.11 | Corregir permisos de archivos punto"
+      ansible.builtin.shell: |
+        for dir in $(awk -F: '($3 >= 1000 && $7 != "/sbin/nologin" && $7 != "/bin/false") { print $6 }' /etc/passwd); do
+          [ -d "$dir" ] && find "$dir" -maxdepth 1 -name ".*" -perm /g+w,o+w -exec chmod g-w,o-w {} +
+        done
+      when: cis_6_2_11_dot_files.stdout != ""
+      tags: ["remediation", "6.2.11"]
+
+    - name: "AUDIT | REPORT | Supplemental Checks"
+      block:
+        - name: "AUDIT | 1.2.1 | Repositorios activos"
+          ansible.builtin.shell: yum repolist | grep -E "^[a-zA-Z0-9]"
+          register: cis_1_2_1_repos
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 1.2.3 | GPG Keys"
+          ansible.builtin.shell: rpm -q gpg-pubkey
+          register: cis_1_2_3_gpg
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 1.5.4 | Prelink status"
+          ansible.builtin.command: rpm -q prelink
+          register: cis_1_5_4_prelink
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 3.4.5 | Stat /etc/hosts.deny"
+          ansible.builtin.stat:
+            path: /etc/hosts.deny
+          register: cis_3_4_5_stat
+
+        - name: "AUDIT | 5.1.2 | Stat /etc/crontab"
+          ansible.builtin.stat:
+            path: /etc/crontab
+          register: cis_5_1_2_stat
+
+        - name: "AUDIT | 5.2.1 | Sudo status"
+          ansible.builtin.command: rpm -q sudo
+          register: cis_5_2_1_sudo
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 5.3.1 | Stat sshd_config"
+          ansible.builtin.stat:
+            path: /etc/ssh/sshd_config
+          register: cis_5_3_1_stat
+
+        - name: "AUDIT | 5.3.8-14 | SSH Runtime settings"
+          ansible.builtin.shell: |
+            sshd -T | grep -E "maxauthtries|ignorerhosts|permitemptypasswords|ciphers"
+          register: ssh_runtime_all
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 5.3.8 | MaxAuthTries (Extract)"
+          ansible.builtin.set_fact:
+            cis_5_3_8_runtime:
+              stdout: "{{ ssh_runtime_all.stdout | regex_search('maxauthtries \\d+') | default('N/A') }}"
+            cis_5_3_9_runtime:
+              stdout: "{{ ssh_runtime_all.stdout | regex_search('ignorerhosts \\w+') | default('N/A') }}"
+            cis_5_3_12_runtime:
+              stdout: "{{ ssh_runtime_all.stdout | regex_search('permitemptypasswords \\w+') | default('N/A') }}"
+            cis_5_3_14_runtime:
+              stdout: "{{ ssh_runtime_all.stdout | regex_search('ciphers .*') | default('N/A') }}"
+
+        - name: "AUDIT | 5.4.1 | Password Creation Check"
+          ansible.builtin.shell: grep pam_cracklib /etc/pam.d/system-auth || echo "NOT CONFIGURED"
+          register: cis_5_4_1_pwauth
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 5.5.5 | Umask Check"
+          ansible.builtin.shell: grep -h umask /etc/bashrc /etc/profile | tail -n 1
+          register: cis_5_5_5_restrictive
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 5.7 | SU Access Check"
+          ansible.builtin.shell: grep pam_wheel /etc/pam.d/su || echo "NOT CONFIGURED"
+          register: cis_5_7_pam
+          changed_when: false
+          failed_when: false
+
+        - name: "AUDIT | 5.7 | Wheel Group Members"
+          ansible.builtin.shell: grep "^wheel:" /etc/group
+          register: cis_5_7_wheel
+          changed_when: false
+          failed_when: false
+      tags: ["report"]
+
+    # =============================================================================
+    # REPORTING — CIS Compliance Report
+    # =============================================================================
+
+    - name: "REPORT | Generar reporte consolidado CIS"
+      ansible.builtin.copy:
+        dest: "{{ report_path }}"
+        mode: "0644"
+        content: |
+          ================================================================
+          CIS BENCHMARK — COMPLIANCE REPORT
+          ================================================================
+          Host      : {{ inventory_hostname }}
+          OS        : {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel    : {{ ansible_kernel }}
+          Fecha     : {{ ansible_date_time.iso8601 }}
+          ================================================================
+
+          CONTROLES EVALUADOS:
+            [1.3.3] Single User Mode Auth
+            [1.4.1] ASLR Enabled
+            [1.4.2] ptrace_scope restricted
+            [1.4.4] Core Dumps disabled
+            [1.5.1.5] SELinux Enforcing
+            [1.6]   Warning Banners
+            [1.7.1] GDM removed
+            [2.2]   Unnecessary Services
+            [2.3]   Service Clients
+            [3.1.2] Wireless disabled
+            [3.1.3] Bluetooth disabled
+            [3.2]   Network Kernel Modules
+            [3.3]   Network Kernel Parameters
+            [3.4]   Host Based Firewall
+            [4.1]   Cron and At restrictions
+            [4.3]   Sudo and su restrictions
+            [4.4]   PAM Arguments
+            [4.5]   Shadow parameters
+            [5.1]   Journald config
+            [5.2]   Auditd configuration
+            [5.3]   Integrity Checking (AIDE)
+            [6.1]   System File Permissions
+            [6.2]   User and Group Settings
+
+          ----------------------------------------------------------------
+          DETALLE DE CUMPLIMIENTO:
+
+          [1.3.3] Single User Auth    : {{ 'PASS' if cis_1_3_3_emergency.stdout == 'PASS' and cis_1_3_3_rescue.stdout == 'PASS' else 'FAIL/REMEDIATED' }}
+          [1.4.1] ASLR                : {{ cis_1_5_3_aslr.stdout | default('N/A') }}
+          [1.4.2] ptrace_scope        : {{ cis_1_4_2_ptrace.stdout | default('N/A') }}
+          [1.4.4] Core Dumps          : {{ cis_1_5_1_sysctl.stdout | default('N/A') }}
+          [1.5.1.5] SELinux Enforcing : {{ cis_1_5_1_5_selinux.stdout | default('N/A') }}
+          [1.7.1] GDM Installed       : {{ 'NO' if cis_1_7_1_gdm.rc != 0 else 'YES (REMOVED)' }}
+          [2.2]   Unnecessary Srvs    : {{ 'NONE' if cis_2_2_services.rc != 0 else 'DETECTED (REMOVED)' }}
+          [3.1.2] Wireless Status     : {{ cis_3_1_2_wifi.stdout | default('N/A') }}
+          [3.1.3] Bluetooth Status    : {{ 'DISABLED' if cis_3_1_3_bluetooth.status.ActiveState != 'active' else 'ACTIVE (REMEDIATING)' }}
+          [3.2]   Network Kern Modules: {{ cis_3_2_modules.results | map(attribute='stdout') | join(' | ') }}
+          [3.3.1] IP Forwarding       : {{ cis_3_2_1_ipv4_fwd.stdout | default('N/A') }}
+          [3.3.8] TCP SYN Cookies     : {{ cis_3_3_8_runtime.stdout | default('N/A') }}
+          [4.1.8] Cron/At restricted  : {{ 'YES' if not cis_4_1_8_stats.results[0].stat.exists else 'NO (REMEDIATED)' }}
+          [4.3.2] sudo use_pty        : {{ cis_4_3_2_pty.stdout | default('N/A') }}
+          [4.3.7] su restricted       : {{ cis_4_3_7_su.stdout | default('N/A') }}
+          [4.4.2] Password SHA512     : {{ cis_4_4_2_sha512.stdout | default('N/A') }}
+          [4.5.1] login.defs SHA512   : {{ cis_4_5_1_method.stdout | default('N/A') }}
+          [4.5.2.3] Sys accounts lock : {{ 'OK' if cis_4_5_2_3_sys_accounts.stdout == "" else 'LOCKED ' ~ cis_4_5_2_3_sys_accounts.stdout }}
+          [5.1]   Journald Comp/Pers  : {{ cis_5_1_journald.stdout | default('N/A') }}
+          [5.2.1.2] Audit Backlog     : {{ cis_5_2_1_2_backlog.stdout | default('N/A') }}
+          [5.2.1.3] Audit Boot        : {{ cis_5_2_1_3_boot.stdout | default('N/A') }}
+          [5.2.2.3] Audit Halt        : {{ cis_5_2_2_3_halt.stdout | default('N/A') }}
+          [5.4.1] pam_cracklib        : {{ cis_5_4_1_pwauth.stdout | default('N/A') }}
+          [5.5.5] umask restringido   : {{ cis_5_5_5_restrictive.stdout | default('N/A') }}
+          [5.7]   su Access restricted: {{ cis_5_7_pam.stdout | default('N/A') }}
+          [6.1.1] /etc/passwd perms   : {{ cis_6_1_1_stat.stat.mode | default('N/A') }}
+          [6.1.10] opasswd perms      : {{ cis_6_1_10_opasswd.stat.mode | default('N/A') }}
+          [6.1.11] World Writable     : {{ 'NONE' if cis_6_1_11_world_writable.stdout == "" else 'FOUND' }}
+          [6.2.1] Unshadowed accounts : {{ cis_6_2_1_unshadowed.stdout | default('NONE (OK)') or 'NONE (OK)' }}
+          [6.2.2] Empty shadow fields : {{ cis_6_2_2_empty_shadow.stdout | default('NONE (OK)') or 'NONE (OK)' }}
+          [6.2.3] Group integrity     : {{ cis_6_2_3_group_integrity.stdout | default('OK') or 'OK' }}
+          [6.2.4-7] Duplicates check  : {{ cis_6_2_duplicates.stdout_lines | join(', ') | default('NONE') }}
+          [6.2.9] UID 0 accounts      : {{ cis_6_2_9_uid_zero.stdout_lines | join(', ') }}
+          [6.2.11] Dot files check    : {{ 'FAIL' if cis_6_2_11_dot_files.stdout != "" else 'PASS' }}
+          ================================================================
+      tags: ["report"]
+
+    - name: "REPORT | Confirmar ubicación del reporte"
+      ansible.builtin.debug:
+        msg: "Reporte de cumplimiento generado en: {{ report_path }}"
+      tags: ["report"]
+
+  handlers:
+    - name: restart postfix
+      ansible.builtin.service:
+        name: postfix
+        state: restarted
+    - name: reload sshd
+      ansible.builtin.service:
+        name: sshd
+        state: reloaded
+    - name: restart journald
+      ansible.builtin.systemd:
+        name: systemd-journald
+        state: restarted
+    - name: restart auditd
+      ansible.builtin.service:
+        name: auditd
+        state: restarted
+    - name: update grub
+      ansible.builtin.command: grub2-mkconfig -o /boot/grub2/grub.cfg
